@@ -2,14 +2,16 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
-//import { API_URL } from '@env';
+import { API_URL } from '@env';
 import Constants from 'expo-constants';
 
-//const API_URL = 'http://192.168.100.96:3001';
-const API_URL = 'http://167.99.4.123:3001';
+// Fallback in case env variable isn't loaded
+const API_ENDPOINT = API_URL || 'https://167.99.4.123:3001';
+
 
 // Create the AuthContext
 export const AuthContext = createContext();
+
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -24,10 +26,19 @@ export const AuthProvider = ({ children }) => {
         console.log('Starting to load auth token...');
         const storedToken = await SecureStore.getItemAsync('auth_token');
         console.log('Stored token exists:', !!storedToken);
-        const storedUser = await SecureStore.getItemAsync('user');
-        console.log('Stored user exists:', !!storedUser);
         
-        // Rest of your code
+        if (storedToken) {
+          setToken(storedToken);
+          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+          
+          const storedUser = await SecureStore.getItemAsync('user');
+          console.log('Stored user exists:', !!storedUser);
+          
+          if (storedUser) {
+            const userData = JSON.parse(storedUser);
+            setUser(userData);
+          }
+        }
       } catch (e) {
         console.error('Failed to load auth tokens', e);
       } finally {
@@ -38,17 +49,17 @@ export const AuthProvider = ({ children }) => {
     
     loadToken();
   }, []);
-
   // Login function
   const login = async (email, password) => {
     try {
       setLoading(true);
       setError(null);
       
-      console.log('Attempting login to:', `${API_URL}/api/auth/login`);
+      console.log('Attempting login to:', `${API_ENDPOINT}/api/auth/login`);
       console.log('Login payload:', { email, password });
       
-      const response = await axios.post(`${API_URL}/api/auth/login`, {
+      // Use direct axios call instead of apiClient to ensure it works
+      const response = await axios.post(`${API_ENDPOINT}/api/auth/login`, {
         email,
         password
       });
@@ -96,7 +107,7 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await axios.post(`${API_URL}/api/auth/register`, {
+      const response = await axios.post(`${API_ENDPOINT}/api/auth/register`, {
         name,
         email,
         password
@@ -131,7 +142,7 @@ export const AuthProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
-      const response = await axios.post(`${API_URL}/api/auth/register-invited`, {
+      const response = await axios.post(`${API_ENDPOINT}/api/auth/register-invited`, {
         name,
         email,
         password,
@@ -165,7 +176,7 @@ export const AuthProvider = ({ children }) => {
   const logout = async () => {
     try {
       // Call logout API
-      await axios.post(`${API_URL}/api/auth/logout`);
+      await axios.post(`${API_ENDPOINT}/api/auth/logout`);
     } catch (e) {
       console.error('Logout API error', e);
     }
@@ -185,7 +196,7 @@ export const AuthProvider = ({ children }) => {
   // Check invitation token
   const checkInvitation = async (token) => {
     try {
-      const response = await axios.get(`${API_URL}/api/invitations/check/${token}`);
+      const response = await axios.get(`${API_ENDPOINT}/api/invitations/check/${token}`);
       return response.data;
     } catch (e) {
       return { valid: false, error: e.response?.data?.error || 'Invalid invitation link' };

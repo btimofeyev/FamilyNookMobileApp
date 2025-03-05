@@ -2,60 +2,71 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
-//const API_URL = 'http://192.168.100.96:3001';
-const API_URL = 'http://167.99.4.123:3001';
+// Use the direct IP that works for now
+const API_ENDPOINT = 'https://167.99.4.123:3001';
+console.log('Using fixed API endpoint:', API_ENDPOINT);
+
 const apiClient = axios.create({
-  baseURL: API_URL,
+  baseURL: API_ENDPOINT,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: 15000,
 });
 
 // Request interceptor for adding the token
 apiClient.interceptors.request.use(
   async (config) => {
+    console.log(`Request to: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
     const token = await SecureStore.getItemAsync('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log('Using auth token:', token.substring(0, 15) + '...');
+    } else {
+      console.log('No auth token available');
     }
     return config;
   },
   (error) => {
+    console.error('Request setup error:', error.message);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor for handling token expiration
+// Response interceptor with better error handling
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log(`Response from ${response.config.url}: ${response.status}`);
+    return response;
+  },
   async (error) => {
-    const originalRequest = error.config;
+    console.error(`Error response from ${error.config?.url}:`, {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
     
-    // If the error is due to an expired token (status 401) and we haven't retried yet
+    // Token refresh logic (same as before)
+    const originalRequest = error.config;
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
       
       try {
-        // Attempt to refresh the token
         const refreshToken = await SecureStore.getItemAsync('refresh_token');
         if (!refreshToken) {
-          // No refresh token available, redirect to login
           return Promise.reject(error);
         }
         
-        const response = await axios.post(`${API_URL}/api/auth/refresh-token`, {
+        const response = await axios.post(`${API_ENDPOINT}/api/auth/refresh-token`, {
           refreshToken,
         });
         
         const { token } = response.data;
         await SecureStore.setItemAsync('auth_token', token);
         
-        // Update the original request with the new token
         originalRequest.headers.Authorization = `Bearer ${token}`;
         return apiClient(originalRequest);
       } catch (refreshError) {
-        // If refresh fails, clear tokens and redirect to login
         await SecureStore.deleteItemAsync('auth_token');
         await SecureStore.deleteItemAsync('refresh_token');
         await SecureStore.deleteItemAsync('user');

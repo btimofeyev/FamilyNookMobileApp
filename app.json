@@ -4,11 +4,11 @@
     "slug": "FamilyNookMobileApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -17,12 +17,30 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/logo.png",
         "backgroundColor": "#ffffff"
+      },
+      "package": "com.btimofeyev.familynook",
+      "versionCode": 1,
+      "permissions": [],
+      "config": {
+        "usesCleartextTraffic": true
       }
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "024ae2e1-c689-4f1d-99c7-df5af4322a34"
+      }
+    },
+    "owner": "btimofeyev",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/024ae2e1-c689-4f1d-99c7-df5af4322a34"
     }
   }
 }

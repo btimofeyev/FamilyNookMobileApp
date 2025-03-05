@@ -6,8 +6,10 @@ import { useAuth } from '../../context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import axios from 'axios';
+import { API_URL } from '@env';
 
-const API_URL = 'http://192.168.100.96:3001';
+// Fallback in case env variable isn't loaded
+const API_ENDPOINT = API_URL || 'https://167.99.4.123:3001';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -17,17 +19,36 @@ export default function LoginScreen() {
   const { login, loading, error } = useAuth();
   const router = useRouter();
 
+
   useEffect(() => {
+    // Log environment information
+    console.log('Environment check:');
+    console.log('API_URL from env:', API_URL);
+    console.log('API_ENDPOINT being used:', API_ENDPOINT);
+    console.log('Full endpoint URL:', `${API_ENDPOINT}/api/health`);
+    
     const testConnection = async () => {
       try {
         console.log('Testing API connection...');
-        const response = await axios.get(`${API_URL}/api/health`);
+        console.log('Request URL:', `${API_ENDPOINT}/api/health`);
+        
+        const response = await axios.get(`${API_ENDPOINT}/api/health`);
         console.log('API connection successful:', response.data);
+        console.log('Response headers:', response.headers);
+        console.log('Response status:', response.status);
       } catch (error) {
         console.error('API connection failed:', {
           message: error.message,
           code: error.code,
-          response: error.response?.data
+          status: error.response?.status,
+          headers: error.response?.headers,
+          data: error.response?.data,
+          request: error.request ? 'Request was made but no response' : 'Request setup failed'
+        });
+        
+        // Log network info if available
+        console.log('Network info:', {
+          online: typeof navigator !== 'undefined' && navigator.onLine
         });
       }
     };
@@ -155,6 +176,7 @@ export default function LoginScreen() {
         </View>
       </BlurView>
     </KeyboardAvoidingView>
+    
   );
 }
 

@@ -4,8 +4,10 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator,
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import axios from 'axios';
+import { API_URL } from '@env';
 
-const API_URL = 'http://192.168.100.96:3001';
+// Fallback in case env variable isn't loaded
+const API_ENDPOINT = API_URL || 'http://167.99.4.123:3001';
 
 export default function ForgotPasswordScreen() {
   const [email, setEmail] = useState('');
@@ -32,7 +34,7 @@ export default function ForgotPasswordScreen() {
     setLoading(true);
     try {
       // Call password reset API
-      await axios.post(`${API_URL}/api/auth/forgot-password`, { email });
+      await axios.post(`${API_ENDPOINT}/api/auth/forgot-password`, { email });
       
       Alert.alert(
         "Reset Link Sent",
