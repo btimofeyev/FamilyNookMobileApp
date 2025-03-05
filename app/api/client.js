@@ -3,7 +3,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 // Use the direct IP that works for now
-const API_ENDPOINT = 'https://167.99.4.123:3001';
+const API_ENDPOINT = 'https://famlynook.com';
 console.log('Using fixed API endpoint:', API_ENDPOINT);
 
 const apiClient = axios.create({

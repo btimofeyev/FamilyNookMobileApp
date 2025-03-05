@@ -9,7 +9,7 @@ import axios from 'axios';
 import { API_URL } from '@env';
 
 // Fallback in case env variable isn't loaded
-const API_ENDPOINT = API_URL || 'https://167.99.4.123:3001';
+const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');

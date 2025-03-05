@@ -6,7 +6,7 @@ import { API_URL } from '@env';
 import Constants from 'expo-constants';
 
 // Fallback in case env variable isn't loaded
-const API_ENDPOINT = API_URL || 'https://167.99.4.123:3001';
+const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 
 // Create the AuthContext
