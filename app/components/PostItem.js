@@ -206,7 +206,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
             style={styles.deleteButton}
             hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
           >
-            <Ionicons name="ellipsis-horizontal" size={20} color="#AEAEB2" />
+            <Ionicons name="ellipsis-horizontal" size={20} color="#8E8E93" />
           </TouchableOpacity>
         )}
       </View>
@@ -243,7 +243,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
             <Ionicons 
               name={liked ? "heart" : "heart-outline"} 
               size={22} 
-              color={liked ? "#FF453A" : "#AEAEB2"} 
+              color={liked ? "#FF453A" : "#8E8E93"} 
             />
           </Animated.View>
           <Text style={[styles.actionText, liked && styles.likedText]}>
@@ -264,7 +264,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
           <Ionicons 
             name={showComments ? "chatbubble" : "chatbubble-outline"} 
             size={20} 
-            color={showComments ? "#4CC2C4" : "#AEAEB2"} 
+            color={showComments ? "#3BAFBC" : "#8E8E93"} 
           />
           <Text style={[styles.actionText, showComments && styles.commentActiveText]}>
             {post.comments_count || 0} {post.comments_count === 1 ? 'Comment' : 'Comments'}
@@ -294,17 +294,16 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#1C1C1E',
+    backgroundColor: '#121212', // Back to Onyx Black background
     borderRadius: 16,
     padding: 16,
-    marginBottom: 16,
+    marginBottom: 0, // Remove bottom margin since the PostItemContainer already has margins
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-    borderWidth: 1,
-    borderColor: '#2C2C2E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 0, // Remove border
   },
   header: {
     flexDirection: 'row',
@@ -318,41 +317,42 @@ const styles = StyleSheet.create({
   author: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White for author name
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
-    letterSpacing: 0.2,
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
   timeAgo: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#8E8E93', // Slate Gray for time
     marginTop: 3,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   deleteButton: {
     padding: 6,
     borderRadius: 12,
+    backgroundColor: 'rgba(59, 175, 188, 0.08)', // Very subtle teal background
   },
   caption: {
     fontSize: 15,
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White for caption
     marginBottom: 14,
     lineHeight: 22,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    letterSpacing: 0.1,
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
   image: {
     width: '100%',
     height: width * 0.7, // Slightly taller aspect ratio
     borderRadius: 12,
     marginBottom: 14,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#1E2B2F', // Midnight Green for image placeholder
   },
   videoContainer: {
     width: '100%',
     height: width * 0.7,
     borderRadius: 12,
     marginBottom: 14,
-    backgroundColor: '#000',
+    backgroundColor: '#1E2B2F', // Midnight Green for video placeholder
     overflow: 'hidden',
     position: 'relative',
   },
@@ -369,16 +369,16 @@ const styles = StyleSheet.create({
   linkPreview: {
     flexDirection: 'row',
     borderWidth: 1,
-    borderColor: '#38383A',
+    borderColor: 'rgba(59, 175, 188, 0.2)', // Subtle Teal Glow border
     borderRadius: 12,
     overflow: 'hidden',
     marginBottom: 14,
-    backgroundColor: '#2C2C2E',
+    backgroundColor: '#1E2B2F', // Midnight Green for link preview
   },
   linkImage: {
     width: 90,
     height: 90,
-    backgroundColor: '#3A3A3C',
+    backgroundColor: '#121212', // Onyx Black for image placeholder
   },
   linkContent: {
     flex: 1,
@@ -388,27 +388,28 @@ const styles = StyleSheet.create({
   linkTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White for link title
     marginBottom: 5,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2,
   },
   linkDescription: {
     fontSize: 12,
-    color: '#AEAEB2',
+    color: '#8E8E93', // Slate Gray for link description
     marginBottom: 5,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     lineHeight: 16,
   },
   linkUrl: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: '#8E8E93', // Slate Gray for URL
     opacity: 0.8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   actions: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#2C2C2E',
+    borderTopColor: 'rgba(59, 175, 188, 0.1)', // Very subtle Teal Glow border
     paddingTop: 14,
   },
   actionButton: {
@@ -419,14 +420,15 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 14,
-    color: '#AEAEB2',
+    color: '#8E8E93', // Slate Gray for action text
     marginLeft: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2,
   },
   likedText: {
-    color: '#FF453A',
+    color: '#FF453A', // Keep the iOS system red for likes
   },
   commentActiveText: {
-    color: '#4CC2C4',
+    color: '#3BAFBC', // Teal Glow for comment active state
   }
 });

@@ -82,7 +82,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
         { opacity, marginLeft: nestingMargin }
       ]}
     >
-      <BlurView intensity={15} tint="dark" style={styles.commentContainer}>
+      <BlurView intensity={10} tint="dark" style={styles.commentContainer}>
         <View style={styles.commentHeader}>
           <Text style={styles.commentAuthor}>{authorName}</Text>
           <TimeAgo date={new Date(comment.created_at)} style={styles.commentTime} />
@@ -97,7 +97,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
               style={styles.actionButton}
               activeOpacity={0.7}
             >
-              <Ionicons name="return-down-forward-outline" size={14} color="#4CC2C4" style={styles.actionIcon} />
+              <Ionicons name="return-down-forward-outline" size={14} color="#3BAFBC" style={styles.actionIcon} />
               <Text style={styles.actionText}>Reply</Text>
             </TouchableOpacity>
           )}
@@ -111,7 +111,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
               <Ionicons 
                 name={showReplies ? "chevron-up" : "chevron-down"} 
                 size={14} 
-                color="#4CC2C4" 
+                color="#3BAFBC" 
                 style={styles.actionIcon} 
               />
               <Text style={[styles.actionText, showReplies && styles.activeAction]}>
@@ -155,7 +155,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
             left: -8, 
             height: '100%', 
             top: 0,
-            backgroundColor: '#4CC2C4' // Teal color from logo
+            backgroundColor: '#3BAFBC' // Teal Glow for thread line
           }
         ]} />
       )}
@@ -168,11 +168,11 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   commentContainer: {
-    backgroundColor: 'rgba(44, 44, 46, 0.8)', // Dark background with some transparency
+    backgroundColor: 'rgba(18, 18, 18, 0.8)', // Onyx Black with transparency
     borderRadius: 16,
     padding: 14,
     borderLeftWidth: 2,
-    borderLeftColor: '#4CC2C4', // Teal color from logo
+    borderLeftColor: '#3BAFBC', // Teal Glow
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -188,20 +188,22 @@ const styles = StyleSheet.create({
   commentAuthor: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
   commentTime: {
     fontSize: 12,
-    color: '#8E8E93',
+    color: '#8E8E93', // Slate Gray
     marginLeft: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   commentText: {
     fontSize: 15,
-    color: '#EBEBF5',
+    color: '#F5F5F7', // Soft White
     lineHeight: 22,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
   commentActions: {
     flexDirection: 'row',
@@ -218,12 +220,13 @@ const styles = StyleSheet.create({
   },
   actionText: {
     fontSize: 13,
-    color: '#4CC2C4', // Teal color from logo
+    color: '#3BAFBC', // Teal Glow
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.1,
   },
   activeAction: {
-    color: '#F0C142', // Gold color from logo
+    color: '#98D8D3', // Soft Mint (secondary accent)
   },
   deleteButton: {
     marginLeft: 'auto',
@@ -232,9 +235,10 @@ const styles = StyleSheet.create({
   },
   deleteText: {
     fontSize: 13,
-    color: '#FF453A', // Apple's red color
+    color: '#FF453A', // Apple's system red color
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.1,
   },
   repliesContainer: {
     marginTop: 10,
@@ -243,7 +247,7 @@ const styles = StyleSheet.create({
   threadLine: {
     position: 'absolute',
     width: 1.5,
-    backgroundColor: '#4CC2C4',
+    backgroundColor: '#3BAFBC', // Teal Glow for thread line
     opacity: 0.7,
   },
 });

@@ -1,10 +1,11 @@
 // app/(auth)/login.js
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import { API_URL } from '@env';
 
@@ -18,7 +19,6 @@ export default function LoginScreen() {
   const [passwordError, setPasswordError] = useState('');
   const { login, loading, error } = useAuth();
   const router = useRouter();
-
 
   useEffect(() => {
     // Log environment information
@@ -99,13 +99,14 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView 
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
       style={styles.container}
     >
       <StatusBar style="light" />
       
       <View style={styles.logoContainer}>
         <Image 
-          source={require('../../assets/logo.png')}  // Make sure to add your logo here
+          source={require('../../assets/mainlogo.png')}
           style={styles.logo} 
           resizeMode="contain" 
         />
@@ -113,77 +114,94 @@ export default function LoginScreen() {
         <Text style={styles.tagline}>Connecting families, one moment at a time</Text>
       </View>
 
-      <BlurView intensity={20} tint="dark" style={styles.formContainer}>
-        <Text style={styles.title}>Welcome Back</Text>
-        
-        {error && <Text style={styles.errorText}>{error}</Text>}
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={[styles.input, emailError ? styles.inputError : null]}
-            placeholder="Enter your email"
-            placeholderTextColor="#8E8E93"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            selectionColor="#4CC2C4"
-          />
-          {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-        </View>
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Password</Text>
-          <TextInput
-            style={[styles.input, passwordError ? styles.inputError : null]}
-            placeholder="Enter your password"
-            placeholderTextColor="#8E8E93"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            selectionColor="#4CC2C4"
-          />
-          {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
-        </View>
-
-        <Link href="/forgot-password" asChild>
-          <TouchableOpacity>
-            <Text style={styles.forgotPassword}>Forgot Password?</Text>
-          </TouchableOpacity>
-        </Link>
-
-        <TouchableOpacity 
-          style={styles.button} 
-          onPress={handleLogin}
-          disabled={loading}
-          activeOpacity={0.8}
+      <BlurView intensity={15} tint="dark" style={styles.formContainer}>
+        <ScrollView 
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
         >
-          {loading ? (
-            <ActivityIndicator color="#000000" />
-          ) : (
-            <Text style={styles.buttonText}>Log In</Text>
-          )}
-        </TouchableOpacity>
+          <Text style={styles.title}>Welcome Back</Text>
+        
+          {error && <Text style={styles.errorText}>{error}</Text>}
 
-        <View style={styles.signupContainer}>
-          <Text style={styles.signupText}>Don't have an account? </Text>
-          <Link href="/register" asChild>
-            <TouchableOpacity>
-              <Text style={styles.signupLink}>Sign Up</Text>
-            </TouchableOpacity>
-          </Link>
-        </View>
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={[styles.input, emailError ? styles.inputError : null]}
+              placeholder="Enter your email"
+              placeholderTextColor="#8E8E93"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              selectionColor="#3BAFBC"
+            />
+            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
+          </View>
+
+          <View style={styles.inputContainer}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={[styles.input, passwordError ? styles.inputError : null]}
+              placeholder="Enter your password"
+              placeholderTextColor="#8E8E93"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              selectionColor="#3BAFBC"
+            />
+            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
+          </View>
+
+          <View style={styles.forgotPasswordContainer}>
+            <Link href="/forgot-password" asChild>
+              <TouchableOpacity style={styles.forgotPasswordButton}>
+                <Text style={styles.forgotPassword}>Forgot Password?</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+
+          <TouchableOpacity 
+            style={styles.buttonContainer} 
+            onPress={handleLogin}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={['#1E2B2F', '#3BAFBC']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.buttonGradient}
+            >
+              {loading ? (
+                <ActivityIndicator color="#F5F5F7" />
+              ) : (
+                <Text style={styles.buttonText}>Sign In</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <View style={styles.signupContainer}>
+            <Text style={styles.signupText}>Don't have an account? </Text>
+            <Link href="/register" asChild>
+              <TouchableOpacity>
+                <Text style={styles.signupLink}>Sign Up</Text>
+              </TouchableOpacity>
+            </Link>
+          </View>
+        </ScrollView>
       </BlurView>
     </KeyboardAvoidingView>
-    
   );
 }
 
 const styles = StyleSheet.create({
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 20,
+  },
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#1E2B2F', // Midnight Green background
   },
   logoContainer: {
     alignItems: 'center',
@@ -198,38 +216,42 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#F0C142', // Golden color from the logo
+    color: '#F5F5F7', // Soft White for the app name
     marginTop: 16,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+    letterSpacing: -0.5, // Apple-style tighter letter spacing
   },
   tagline: {
     fontSize: 16,
-    color: '#AEAEB2',
+    color: '#8E8E93', // Slate Gray for the tagline
     marginTop: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2,
   },
   formContainer: {
     flex: 1,
     borderTopLeftRadius: 30,
     borderTopRightRadius: 30,
     paddingTop: 40,
+    paddingBottom: 40,
     paddingHorizontal: 24,
-    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback for when BlurView doesn't work
+    backgroundColor: 'rgba(18, 18, 18, 0.85)', // Onyx Black with opacity
     overflow: 'hidden',
   },
   title: {
     fontSize: 28,
     fontWeight: '600',
     marginBottom: 32,
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White for the title
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+    letterSpacing: -0.5,
   },
   inputContainer: {
     marginBottom: 24,
   },
   label: {
     fontSize: 16,
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White for labels
     marginBottom: 8,
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
@@ -237,49 +259,63 @@ const styles = StyleSheet.create({
   input: {
     height: 54,
     borderWidth: 1,
-    borderColor: '#38383A',
+    borderColor: 'rgba(59, 175, 188, 0.3)', // Subtle Teal Glow for borders
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: '#2C2C2E',
-    color: '#FFFFFF',
+    backgroundColor: 'rgba(18, 18, 18, 0.6)', // Slightly transparent Onyx Black
+    color: '#F5F5F7', // Soft White for text
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    shadowColor: 'rgba(0, 0, 0, 0.3)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 4,
+    shadowOpacity: 0.1,
   },
   inputError: {
-    borderColor: '#FF453A',
+    borderColor: '#FF453A', // Apple's system red color
   },
   errorText: {
-    color: '#FF453A',
+    color: '#FF453A', // Apple's system red color
     fontSize: 14,
     marginTop: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-  forgotPassword: {
-    fontSize: 15,
-    color: '#4CC2C4', // Teal color from the logo
-    textAlign: 'right',
+  forgotPasswordContainer: {
+    alignItems: 'flex-end',
     marginTop: 12,
     marginBottom: 36,
+  },
+  forgotPasswordButton: {
+    alignSelf: 'flex-end',
+  },
+  forgotPassword: {
+    fontSize: 15,
+    color: '#3BAFBC', // Teal Glow for interactive elements
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-  button: {
-    backgroundColor: '#F0C142', // Golden yellow from the logo
+  buttonContainer: {
     height: 54,
     borderRadius: 12,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    elevation: 5,
+  },
+  buttonGradient: {
+    height: '100%',
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   buttonText: {
-    color: '#000000',
+    color: '#F5F5F7', // Soft White for button text
     fontSize: 16,
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2,
   },
   signupContainer: {
     flexDirection: 'row',
@@ -288,12 +324,12 @@ const styles = StyleSheet.create({
   },
   signupText: {
     fontSize: 15,
-    color: '#AEAEB2',
+    color: '#8E8E93', // Slate Gray for secondary text
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   signupLink: {
     fontSize: 15,
-    color: '#4CC2C4', // Teal color from the logo
+    color: '#3BAFBC', // Teal Glow for interactive links
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },

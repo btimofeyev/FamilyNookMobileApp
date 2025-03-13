@@ -8,7 +8,6 @@ import * as Haptics from 'expo-haptics';
 import { useNotifications } from '../../context/NotificationContext';
 import { BlurView } from 'expo-blur';
 
-
 export default function TabsLayout() {
   const { unreadCount } = useNotifications();
 
@@ -16,32 +15,40 @@ export default function TabsLayout() {
     <View style={{ flex: 1 }}>
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: '#F0C142', // Golden color from logo
-          tabBarInactiveTintColor: '#8E8E93',
+          tabBarActiveTintColor: '#3BAFBC', // Teal Glow for active tabs
+          tabBarInactiveTintColor: '#8E8E93', // Slate Gray for inactive tabs
           tabBarStyle: {
-            backgroundColor: '#1C1C1E',
+            backgroundColor: '#121212', // Onyx Black for tab bar
             paddingBottom: Platform.OS === 'ios' ? 28 : 5,
             height: Platform.OS === 'ios' ? 90 : 60,
             borderTopWidth: 1,
-            borderTopColor: '#38383A',
-            // Removed position: 'absolute' to prevent overlapping
+            borderTopColor: 'rgba(59, 175, 188, 0.2)', // Subtle Teal Glow border
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -3 },
+            shadowOpacity: 0.1,
+            shadowRadius: 5,
+            elevation: 5,
           },
           tabBarLabelStyle: {
             fontSize: 11,
             fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
             fontWeight: '500',
             marginBottom: Platform.OS === 'ios' ? 6 : 0,
+            letterSpacing: -0.2, // Apple-style tight letter spacing
           },
           headerStyle: {
-            backgroundColor: '#1C1C1E',
+            backgroundColor: '#121212', // Onyx Black for header
             shadowColor: 'transparent',
             elevation: 0,
+            borderBottomWidth: 1,
+            borderBottomColor: 'rgba(59, 175, 188, 0.2)', // Subtle Teal Glow border
           },
           headerTitleStyle: {
             fontWeight: '600',
             fontSize: 18,
-            color: '#FFFFFF',
+            color: '#F5F5F7', // Soft White for header title
             fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+            letterSpacing: -0.3, // Apple-style tight letter spacing
           },
           headerShadowVisible: false,
           headerTransparent: false,
@@ -52,7 +59,7 @@ export default function TabsLayout() {
         <Tabs.Screen
           name="feed"
           options={{
-            title: 'Family Feed',
+            headerShown: false,
             tabBarLabel: 'Feed',
             tabBarIcon: ({ color, size, focused }) => (
               <View style={styles.tabIconContainer}>
@@ -151,7 +158,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 4,
     borderWidth: 1.5,
-    borderColor: '#1C1C1E',
+    borderColor: '#121212', // Onyx Black border for notification badge
   },
   badgeText: {
     color: '#FFFFFF',

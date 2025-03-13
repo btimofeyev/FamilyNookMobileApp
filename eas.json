@@ -19,7 +19,8 @@
         "gradleCommand": ":app:bundleRelease"
       },
       "distribution": "internal",
-      "channel": "beta"
+      "channel": "beta",
+      "autoIncrement": true
     },
     "beta-apk": {
       "android": {

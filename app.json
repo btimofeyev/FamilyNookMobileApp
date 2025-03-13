@@ -4,21 +4,21 @@
     "slug": "FamilyNookMobileApp",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/logo.png",
+    "icon": "./assets/mainlogo.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/logo.png",
+      "image": "./assets/mainlogo.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/logo.png",
-        "backgroundColor": "#ffffff"
+        "image": "./assets/mainlogo.png",
+        "backgroundColor": "#000000"
       },
       "package": "com.btimofeyev.familynook",
       "versionCode": 1,
@@ -28,7 +28,7 @@
       }
     },
     "web": {
-      "favicon": "./assets/logo.png"
+      "favicon": "./assets/mainlogo.png"
     },
     "extra": {
       "eas": {

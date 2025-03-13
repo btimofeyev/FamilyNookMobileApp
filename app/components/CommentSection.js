@@ -18,6 +18,7 @@ import { getComments, addComment } from '../api/feedService';
 import TimeAgo from './TimeAgo';
 import CommentItem from './CommentItem';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 export default function CommentSection({ postId, initialComments = [], onCommentAdded }) {
   const [comments, setComments] = useState(initialComments || []);
@@ -196,8 +197,8 @@ export default function CommentSection({ postId, initialComments = [], onComment
     >
       <View style={styles.commentInputWrapper}>
         {replyingTo && (
-          <BlurView intensity={15} tint="dark" style={styles.replyingToContainer}>
-            <Ionicons name="return-down-forward-outline" size={16} color="#4CC2C4" />
+          <BlurView intensity={10} tint="dark" style={styles.replyingToContainer}>
+            <Ionicons name="return-down-forward-outline" size={16} color="#3BAFBC" />
             <Text style={styles.replyingToText}>
               Replying to <Text style={styles.replyingToName}>{replyingTo.author_name || replyingTo.user_name}</Text>
             </Text>
@@ -222,7 +223,7 @@ export default function CommentSection({ postId, initialComments = [], onComment
               onChangeText={setNewComment}
               multiline
               maxLength={1000}
-              selectionColor="#4CC2C4"
+              selectionColor="#3BAFBC"
               returnKeyType="default"
               keyboardAppearance="dark"
             />
@@ -230,24 +231,28 @@ export default function CommentSection({ postId, initialComments = [], onComment
           <TouchableOpacity 
             onPress={handleAddComment} 
             disabled={submitting || !newComment.trim()}
-            style={[
-              styles.submitButton, 
-              (!newComment.trim() || submitting) && styles.disabledButton
-            ]}
+            style={styles.submitButtonContainer}
             activeOpacity={0.8}
           >
-            {submitting ? (
-              <ActivityIndicator size="small" color="#000000" />
-            ) : (
-              <Ionicons name="paper-plane" size={18} color="#000000" />
-            )}
+            <LinearGradient
+              colors={!newComment.trim() || submitting ? ['rgba(30, 43, 47, 0.5)', 'rgba(59, 175, 188, 0.5)'] : ['#1E2B2F', '#3BAFBC']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.submitButton}
+            >
+              {submitting ? (
+                <ActivityIndicator size="small" color="#F5F5F7" />
+              ) : (
+                <Ionicons name="paper-plane" size={18} color="#F5F5F7" />
+              )}
+            </LinearGradient>
           </TouchableOpacity>
         </View>
       </View>
       
       {loading ? (
         <View style={styles.loadingContainer}>
-          <ActivityIndicator style={styles.loading} color="#F0C142" size="small" />
+          <ActivityIndicator style={styles.loading} color="#3BAFBC" size="small" />
           <Text style={styles.loadingText}>Loading comments...</Text>
         </View>
       ) : (
@@ -286,16 +291,17 @@ const styles = StyleSheet.create({
   container: {
     marginTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(90, 90, 95, 0.3)',
+    borderTopColor: 'rgba(59, 175, 188, 0.1)', // Very subtle Teal Glow border
     paddingTop: 16,
     paddingHorizontal: 8,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White
     marginBottom: 16,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+    letterSpacing: -0.3, // Apple-style tight letter spacing
   },
   commentInputWrapper: {
     marginBottom: 20,
@@ -307,18 +313,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 12,
-    backgroundColor: 'rgba(60, 60, 67, 0.6)', // fallback
+    backgroundColor: 'rgba(18, 18, 18, 0.7)', // Onyx Black with opacity
+    borderWidth: 1,
+    borderColor: 'rgba(59, 175, 188, 0.15)', // Subtle Teal Glow border
   },
   replyingToText: {
     fontSize: 13,
-    color: '#EBEBF5',
+    color: '#F5F5F7', // Soft White
     flex: 1,
     marginLeft: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
   replyingToName: {
     fontWeight: '600',
-    color: '#4CC2C4',
+    color: '#3BAFBC', // Teal Glow
   },
   cancelReplyButton: {
     padding: 4,
@@ -331,7 +340,9 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: 20,
     overflow: 'hidden',
-    backgroundColor: 'rgba(44, 44, 46, 0.8)', // fallback
+    backgroundColor: 'rgba(18, 18, 18, 0.7)', // Onyx Black with opacity
+    borderWidth: 1,
+    borderColor: 'rgba(59, 175, 188, 0.15)', // Subtle Teal Glow border
   },
   input: {
     paddingHorizontal: 16,
@@ -339,25 +350,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minHeight: 42,
     maxHeight: 100,
-    color: '#FFFFFF',
+    color: '#F5F5F7', // Soft White
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
-  submitButton: {
-    backgroundColor: '#F0C142', // Golden color from logo
+  submitButtonContainer: {
     width: 38,
     height: 38,
     borderRadius: 19,
-    justifyContent: 'center',
-    alignItems: 'center',
+    overflow: 'hidden',
     marginLeft: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.2,
     shadowRadius: 3,
-    elevation: 2,
+    elevation: 4,
   },
-  disabledButton: {
-    backgroundColor: 'rgba(240, 193, 66, 0.4)', // Faded gold
+  submitButton: {
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   loadingContainer: {
     alignItems: 'center',
@@ -367,9 +380,10 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   loadingText: {
-    color: '#8E8E93',
+    color: '#8E8E93', // Slate Gray
     fontSize: 14,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
   commentsList: {
     paddingBottom: 16,
@@ -381,23 +395,25 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     textAlign: 'center',
-    color: '#8E8E93',
+    color: '#8E8E93', // Slate Gray
     fontSize: 15,
     marginBottom: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
   emptyButton: {
     paddingVertical: 8,
     paddingHorizontal: 16,
     borderRadius: 16,
-    backgroundColor: 'rgba(76, 194, 196, 0.2)', // Transparent teal
+    backgroundColor: 'rgba(59, 175, 188, 0.1)', // Transparent teal
     borderWidth: 1,
-    borderColor: '#4CC2C4',
+    borderColor: '#3BAFBC', // Teal Glow
   },
   emptyButtonText: {
-    color: '#4CC2C4',
+    color: '#3BAFBC', // Teal Glow
     fontSize: 14,
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2, // Apple-style tight letter spacing
   },
 });

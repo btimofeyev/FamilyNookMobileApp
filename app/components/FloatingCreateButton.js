@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { usePathname } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 
 const FloatingCreateButton = ({ onPress, allowedScreens = ['/feed'], iconName = 'add' }) => {
   const pathname = usePathname();
@@ -30,15 +31,29 @@ const FloatingCreateButton = ({ onPress, allowedScreens = ['/feed'], iconName = 
         activeOpacity={0.9}
       >
         {Platform.OS === 'ios' ? (
-          <BlurView intensity={10} tint="light" style={styles.blurEffect}>
-            <View style={styles.iconContainer}>
-              <Ionicons name={iconName} size={26} color="#000000" />
-            </View>
-          </BlurView>
+          <LinearGradient
+            colors={['#1E2B2F', '#3BAFBC']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradientBackground}
+          >
+            <BlurView intensity={10} tint="dark" style={styles.blurEffect}>
+              <View style={styles.iconContainer}>
+                <Ionicons name={iconName} size={26} color="#F5F5F7" />
+              </View>
+            </BlurView>
+          </LinearGradient>
         ) : (
-          <View style={styles.iconContainer}>
-            <Ionicons name={iconName} size={26} color="#000000" />
-          </View>
+          <LinearGradient
+            colors={['#1E2B2F', '#3BAFBC']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 1 }}
+            style={styles.gradientBackground}
+          >
+            <View style={styles.iconContainer}>
+              <Ionicons name={iconName} size={26} color="#F5F5F7" />
+            </View>
+          </LinearGradient>
         )}
       </TouchableOpacity>
     </View>
@@ -54,19 +69,27 @@ const styles = StyleSheet.create({
     height: 56,
     zIndex: 1000,
     elevation: 10, // For Android
+    borderRadius: 28,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
   },
   button: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: Platform.OS === 'ios' ? 'transparent' : '#F0C142',
+    backgroundColor: 'transparent',
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+  },
+  gradientBackground: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   blurEffect: {
     width: 56,
@@ -75,7 +98,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(240, 193, 66, 0.85)', // Slightly transparent gold color
+    backgroundColor: 'transparent',
   },
   iconContainer: {
     width: '100%',
@@ -83,7 +106,7 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: Platform.OS === 'ios' ? 'transparent' : undefined,
+    backgroundColor: 'transparent',
   }
 });
 

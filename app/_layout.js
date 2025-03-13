@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from '../context/AuthContext';
 import { FamilyProvider } from '../context/FamilyContext';
 import { NotificationProvider } from '../context/NotificationContext';
 import { StatusBar } from 'expo-status-bar';
+import { View } from 'react-native';
 
 const RootLayout = () => {
   return (
@@ -24,14 +25,23 @@ function RootLayoutNav() {
   
   console.log('Navigation State:', { isAuthenticated, loading });
   
-  // Temporarily bypass loading check
   return (
-    <>
-      <StatusBar style="auto" />
-      <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(auth)" />
+    <View style={{ flex: 1, backgroundColor: '#1E2B2F' }}>
+      <StatusBar style="light" />
+      <Stack 
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: '#1E2B2F' },
+          animation: 'fade',
+        }}
+      >
+        {isAuthenticated ? (
+          <Stack.Screen name="(tabs)" />
+        ) : (
+          <Stack.Screen name="(auth)" />
+        )}
       </Stack>
-    </>
+    </View>
   );
 }
 
