@@ -180,7 +180,32 @@ export default function FeedScreen() {
   const handleLoadPostsError = async (error) => {
     console.error("Error loading posts:", error);
     
+    // Check for specific error message from API
+    const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+    
     if (error.response?.status === 401 || error.response?.status === 403) {
+      if (errorMessage.includes('not a member of this family')) {
+        console.log('Family access denied error detected');
+        
+        // This is a family membership error - need to refresh families data
+        try {
+          await refreshFamilies();
+          
+          // After refreshing families, check if we still have the selected family
+          if (families.some(f => f.family_id === selectedFamily?.family_id)) {
+            // If family still exists, retry load but don't increment retry counter
+            return true; // Retry without counting as a retry
+          } else {
+            // Family no longer exists or user has been removed
+            setError("You are no longer a member of this family. Please select another family.");
+            return false;
+          }
+        } catch (refreshError) {
+          console.error("Failed to refresh families:", refreshError);
+        }
+      }
+      
+      // Regular auth error - try to refresh session
       if (retryCount.current < 2) {
         retryCount.current++;
         console.log(`Authentication error, attempting retry #${retryCount.current}`);
@@ -188,26 +213,36 @@ export default function FeedScreen() {
         try {
           // Try to refresh the session
           await refreshUserSession();
-          // If family error, refresh family data
-          if (error.response?.data?.error?.includes('not a member of this family')) {
-            await refreshFamilies();
-          }
-          // Retry loading posts
           return true; // Signal that we should retry
         } catch (refreshError) {
           console.error("Failed to refresh session:", refreshError);
+          
+          if (refreshError.message?.includes('No refresh token')) {
+            // Force logout if no refresh token is available after 2 retries
+            if (retryCount.current >= 2) {
+              Alert.alert(
+                "Session Expired",
+                "Your session has expired. Please log in again.",
+                [{ text: "OK", onPress: async () => {
+                  await logout(false);
+                  router.replace('/(auth)/login');
+                }}]
+              );
+            }
+          }
+          
           setConnectionError(true);
-          setError("Session expired. Please log in again.");
+          setError("Authentication error. Please log in again.");
         }
       } else {
         setConnectionError(true);
-        setError("Authentication error. Please log in again.");
+        setError("Session expired. Please log in again.");
       }
     } else if (!error.response && error.message?.includes('Network Error')) {
       setConnectionError(true);
       setError("Network connection issue. Please check your internet connection.");
     } else {
-      setError(`Failed to load posts: ${error.message || 'Unknown error'}`);
+      setError(`Failed to load posts: ${errorMessage}`);
     }
     
     return false; // Signal that we shouldn't retry

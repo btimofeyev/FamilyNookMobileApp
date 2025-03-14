@@ -7,6 +7,7 @@ import { Platform } from 'react-native';
 import apiClient, { authEvents, resetAuthState } from '../app/api/client';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
+import { ScreenStackHeaderRightView } from 'react-native-screens';
 
 // Fallback in case env variable isn't loaded
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
@@ -238,11 +239,17 @@ export const AuthProvider = ({ children }) => {
         throw new Error('Invalid refresh response');
       }
       
-      const { token: newToken } = response.data;
+      const { token: newToken, refreshToken: newRefreshToken } = response.data;
       console.log('Token successfully refreshed');
       
       // Update tokens
       await SecureStore.setItemAsync('auth_token', newToken);
+      
+      // Store new refresh token if provided
+      if (newRefreshToken) {
+        await SecureStore.setItemAsync('refresh_token', newRefreshToken);
+      }
+      
       setToken(newToken);
       
       // Update axios defaults
@@ -521,3 +528,4 @@ export const useAuth = () => {
   }
   return context;
 };
+

@@ -32,19 +32,24 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-// Request interceptor for adding the token
+// Add request logging middleware
 apiClient.interceptors.request.use(
   async (config) => {
-    // Skip adding token for refresh token or login endpoints
+    // Skip auth for certain endpoints
     if (config.url === '/api/auth/refresh-token' || 
         config.url === '/api/auth/login' ||
+        config.url === '/api/auth/register' ||
         config.url.startsWith('/api/invitations/check/')) {
+      console.log(`API Request: ${config.method} ${config.url} (no auth)`);
       return config;
     }
     
     const token = await SecureStore.getItemAsync('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+      console.log(`API Request: ${config.method} ${config.url} (with auth)`);
+    } else {
+      console.log(`API Request: ${config.method} ${config.url} (no token available)`);
     }
     return config;
   },
@@ -54,13 +59,16 @@ apiClient.interceptors.request.use(
   }
 );
 
-// Response interceptor with better error handling
+// Add response logging middleware
 apiClient.interceptors.response.use(
   (response) => {
+    console.log(`API Response: ${response.status} from ${response.config.url}`);
     return response;
   },
   async (error) => {
-    // Skip retry for specific endpoints
+    console.error(`API Error (${error.config?.url}):`, error.message);
+    
+    // Skip retry logic for specific endpoints
     const skipRetryUrls = [
       '/api/auth/login', 
       '/api/auth/register', 
@@ -70,12 +78,13 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
     const requestUrl = originalRequest?.url || '';
     
-    // Check if error is due to an expired token (status 401)
-    if (error.response?.status === 401 && 
+    // Handle 401/403 errors that need token refresh
+    if ((error.response?.status === 401 || error.response?.status === 403) && 
         !originalRequest._retry && 
         !skipRetryUrls.some(url => requestUrl.includes(url)) &&
         !failedRefreshAttempt) {
       
+      console.log(`Auth error (${error.response?.status}) detected, attempting refresh...`);
       originalRequest._retry = true;
       
       try {
@@ -83,24 +92,46 @@ apiClient.interceptors.response.use(
         if (!refreshTokenPromise) {
           refreshTokenPromise = (async () => {
             try {
-              console.log('Attempting to refresh token...');
-              
-              // Use HTTP cookie or try with refresh token from storage
+              // Get refresh token
               const refreshToken = await SecureStore.getItemAsync('refresh_token');
+              if (!refreshToken) {
+                console.error('No refresh token available for refresh');
+                failedRefreshAttempt = true;
+                authEvents.emit({ type: 'refresh_failed', error: new Error('No refresh token available') });
+                throw new Error('No refresh token available');
+              }
+              
+              console.log('Attempting to refresh token using refresh token...');
+              
+              // Make direct request to avoid interceptors
               const response = await axios.post(
                 `${API_ENDPOINT}/api/auth/refresh-token`, 
-                refreshToken ? { refreshToken } : {}, 
-                { withCredentials: true }
+                { refreshToken }, 
+                { 
+                  withCredentials: true,
+                  timeout: 10000  // 10 seconds timeout for token refresh
+                }
               );
               
-              if (!response.data.token) {
+              if (!response.data || !response.data.token) {
+                console.error('Invalid refresh response - no token');
                 throw new Error('No token in refresh response');
               }
               
-              const { token } = response.data;
+              const { token, refreshToken: newRefreshToken } = response.data;
+              console.log('Token refreshed successfully');
               
               // Store the new access token
               await SecureStore.setItemAsync('auth_token', token);
+              
+              // Store the new refresh token if provided
+              if (newRefreshToken) {
+                console.log('New refresh token received, storing it');
+                await SecureStore.setItemAsync('refresh_token', newRefreshToken);
+              } else {
+                console.log('No new refresh token provided, keeping existing one');
+              }
+              
               failedRefreshAttempt = false;
               
               // Notify listeners about successful token refresh
@@ -108,7 +139,7 @@ apiClient.interceptors.response.use(
               
               return token;
             } catch (error) {
-              console.error('Token refresh failed', error);
+              console.error('Token refresh request failed:', error.message);
               failedRefreshAttempt = true;
               
               // Notify listeners about failed token refresh
@@ -126,18 +157,28 @@ apiClient.interceptors.response.use(
         
         // Update the failed request with the new token
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        console.log('Retrying request with new token');
         
         // Retry the original request with the new token
         return axios(originalRequest);
       } catch (refreshError) {
-        // If refresh token fails, notify AuthContext to handle logout
+        console.error('Token refresh failed completely:', refreshError.message);
+        // Notify AuthContext about authentication issue
+        authEvents.emit({ type: 'authentication_required' });
         return Promise.reject(error);
       }
     }
     
     // If token refresh already failed before, notify about authentication issue
-    if (error.response?.status === 401 && failedRefreshAttempt) {
+    if ((error.response?.status === 401 || error.response?.status === 403) && failedRefreshAttempt) {
+      console.log('Authentication issue after failed refresh, notifying auth system');
       authEvents.emit({ type: 'authentication_required' });
+    }
+    
+    if (error.response?.status === 403 && error.response.data?.error?.includes('not a member of this family')) {
+      // Special handling for family membership errors
+      console.log('User is not a member of the specified family, notifying system');
+      authEvents.emit({ type: 'family_access_denied', error: error.response.data });
     }
     
     return Promise.reject(error);
