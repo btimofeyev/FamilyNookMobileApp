@@ -20,19 +20,20 @@ import { useFamily } from "../../context/FamilyContext";
 import { getFamilyPosts } from "../api/feedService";
 import PostItem from "../components/PostItem";
 import CreatePostForm from "../components/CreatePostForm";
-import { useFocusEffect, useLocalSearchParams } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { BlurView } from "expo-blur";
 import { LinearGradient } from "expo-linear-gradient";
 import FloatingCreateButton from "../components/FloatingCreateButton";
 
 export default function FeedScreen() {
-  const { user } = useAuth();
+  const { user, refreshUserSession } = useAuth();
   const {
     selectedFamily,
     families,
     switchFamily,
     loading: familyLoading,
+    refreshFamilies
   } = useFamily();
 
   // Use expo-router's useLocalSearchParams instead of useRoute
@@ -48,11 +49,13 @@ export default function FeedScreen() {
   const [hasMorePages, setHasMorePages] = useState(true);
   const [loadingMorePosts, setLoadingMorePosts] = useState(false);
   const [highlightedPostId, setHighlightedPostId] = useState(null);
+  const [connectionError, setConnectionError] = useState(false);
 
   // Refs
   const flatListRef = useRef(null);
   const allLoadedPosts = useRef([]);
   const highlightTimerRef = useRef(null);
+  const retryCount = useRef(0);
 
   // Check if we should open the create post modal based on navigation params
   useEffect(() => {
@@ -167,14 +170,48 @@ export default function FeedScreen() {
       }, 500);
     } catch (error) {
       console.error("Error finding post:", error);
+      handleLoadPostsError(error);
     } finally {
       setLoading(false);
     }
   };
 
-  // Debug info
-  console.log("Selected Family:", selectedFamily);
-  console.log("Available Families:", JSON.stringify(families));
+  // Handle errors from loading posts
+  const handleLoadPostsError = async (error) => {
+    console.error("Error loading posts:", error);
+    
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      if (retryCount.current < 2) {
+        retryCount.current++;
+        console.log(`Authentication error, attempting retry #${retryCount.current}`);
+        
+        try {
+          // Try to refresh the session
+          await refreshUserSession();
+          // If family error, refresh family data
+          if (error.response?.data?.error?.includes('not a member of this family')) {
+            await refreshFamilies();
+          }
+          // Retry loading posts
+          return true; // Signal that we should retry
+        } catch (refreshError) {
+          console.error("Failed to refresh session:", refreshError);
+          setConnectionError(true);
+          setError("Session expired. Please log in again.");
+        }
+      } else {
+        setConnectionError(true);
+        setError("Authentication error. Please log in again.");
+      }
+    } else if (!error.response && error.message?.includes('Network Error')) {
+      setConnectionError(true);
+      setError("Network connection issue. Please check your internet connection.");
+    } else {
+      setError(`Failed to load posts: ${error.message || 'Unknown error'}`);
+    }
+    
+    return false; // Signal that we shouldn't retry
+  };
 
   const loadPosts = useCallback(
     async (refresh = false) => {
@@ -198,13 +235,14 @@ export default function FeedScreen() {
         setRefreshing(true);
         setPage(1);
         setHasMorePages(true);
+        // Reset error states on refresh
+        setConnectionError(false);
+        setError(null);
       } else if (currentPage === 1) {
         setLoading(true);
       } else {
         setLoadingMorePosts(true);
       }
-
-      setError(null);
 
       const familyId = selectedFamily.family_id;
       console.log(
@@ -229,6 +267,9 @@ export default function FeedScreen() {
           });
         }
 
+        // Reset retry count on success
+        retryCount.current = 0;
+        
         // Check if there are more pages to load
         if (response.totalPages) {
           setHasMorePages(currentPage < response.totalPages);
@@ -237,20 +278,24 @@ export default function FeedScreen() {
           setHasMorePages(newPosts.length > 0);
         }
       } catch (error) {
-        console.error("Error loading posts:", error);
-        setError(`Failed to load posts: ${error.message}`);
+        const shouldRetry = await handleLoadPostsError(error);
+        
+        if (shouldRetry) {
+          // Retry the request with the same parameters
+          return loadPosts(refresh);
+        }
       } finally {
         setLoading(false);
         setRefreshing(false);
         setLoadingMorePosts(false);
       }
     },
-    [selectedFamily, families, page]
+    [selectedFamily, families, page, refreshUserSession, refreshFamilies]
   );
 
   // Load posts when family changes or on first render
   useEffect(() => {
-    if (!familyLoading) {
+    if (!familyLoading && selectedFamily) {
       loadPosts(true);
     }
   }, [familyLoading, selectedFamily]);
@@ -392,6 +437,27 @@ export default function FeedScreen() {
     }, 100);
   };
 
+  const handleRetryConnection = async () => {
+    setConnectionError(false);
+    setError(null);
+    setLoading(true);
+    
+    try {
+      // Try to refresh user session
+      await refreshUserSession();
+      // Refresh families data
+      await refreshFamilies();
+      // Then reload posts
+      await loadPosts(true);
+    } catch (error) {
+      console.error("Retry failed:", error);
+      setConnectionError(true);
+      setError("Connection failed. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderLoadMoreButton = () => {
     if (!hasMorePages) return null;
 
@@ -417,6 +483,37 @@ export default function FeedScreen() {
       </TouchableOpacity>
     );
   };
+
+  // Render connection error state
+  if (connectionError) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <StatusBar style="light" />
+        <View style={styles.errorContainer}>
+          <Ionicons name="cloud-offline" size={48} color="#3BAFBC" />
+          <Text style={styles.errorText}>
+            Connection Issue
+          </Text>
+          <Text style={styles.errorSubText}>
+            We're having trouble connecting to the server
+          </Text>
+          <TouchableOpacity
+            style={styles.actionButton}
+            onPress={handleRetryConnection}
+          >
+            <LinearGradient
+              colors={['#1E2B2F', '#3BAFBC']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.actionButtonGradient}
+            >
+              <Text style={styles.actionButtonText}>Try Again</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   if (familyLoading) {
     return (
@@ -490,7 +587,7 @@ export default function FeedScreen() {
               <TouchableOpacity
                 style={styles.actionButton}
                 onPress={() => {
-                  /* Navigate to create family screen */
+                  router.push('/create-family');
                 }}
               >
                 <LinearGradient
@@ -584,7 +681,6 @@ export default function FeedScreen() {
     </SafeAreaView>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,

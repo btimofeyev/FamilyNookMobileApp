@@ -1,10 +1,28 @@
 // app/api/client.js
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '@env';
 
-// Use the direct IP that works for now
-const API_ENDPOINT = 'https://famlynook.com';
-console.log('Using fixed API endpoint:', API_ENDPOINT);
+// Use environment variable with fallback
+const API_ENDPOINT = API_URL || 'https://famlynook.com';
+console.log('Using API endpoint:', API_ENDPOINT);
+
+// Keep track of refresh token promise to prevent multiple calls
+let refreshTokenPromise = null;
+// Track failed refresh attempts to avoid infinite refresh loops
+let failedRefreshAttempt = false;
+
+// Event to notify subscribers about auth state changes
+export const authEvents = {
+  listeners: new Set(),
+  subscribe(callback) {
+    this.listeners.add(callback);
+    return () => this.listeners.delete(callback);
+  },
+  emit(event) {
+    this.listeners.forEach(callback => callback(event));
+  }
+};
 
 const apiClient = axios.create({
   baseURL: API_ENDPOINT,
@@ -17,13 +35,16 @@ const apiClient = axios.create({
 // Request interceptor for adding the token
 apiClient.interceptors.request.use(
   async (config) => {
-    console.log(`Request to: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
+    // Skip adding token for refresh token or login endpoints
+    if (config.url === '/api/auth/refresh-token' || 
+        config.url === '/api/auth/login' ||
+        config.url.startsWith('/api/invitations/check/')) {
+      return config;
+    }
+    
     const token = await SecureStore.getItemAsync('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log('Using auth token:', token.substring(0, 15) + '...');
-    } else {
-      console.log('No auth token available');
     }
     return config;
   },
@@ -36,47 +57,96 @@ apiClient.interceptors.request.use(
 // Response interceptor with better error handling
 apiClient.interceptors.response.use(
   (response) => {
-    console.log(`Response from ${response.config.url}: ${response.status}`);
     return response;
   },
   async (error) => {
-    console.error(`Error response from ${error.config?.url}:`, {
-      message: error.message,
-      status: error.response?.status,
-      data: error.response?.data
-    });
+    // Skip retry for specific endpoints
+    const skipRetryUrls = [
+      '/api/auth/login', 
+      '/api/auth/register', 
+      '/api/auth/refresh-token'
+    ];
     
-    // Token refresh logic (same as before)
     const originalRequest = error.config;
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const requestUrl = originalRequest?.url || '';
+    
+    // Check if error is due to an expired token (status 401)
+    if (error.response?.status === 401 && 
+        !originalRequest._retry && 
+        !skipRetryUrls.some(url => requestUrl.includes(url)) &&
+        !failedRefreshAttempt) {
+      
       originalRequest._retry = true;
       
       try {
-        const refreshToken = await SecureStore.getItemAsync('refresh_token');
-        if (!refreshToken) {
-          return Promise.reject(error);
+        // If a refresh is already in progress, wait for that instead of starting a new one
+        if (!refreshTokenPromise) {
+          refreshTokenPromise = (async () => {
+            try {
+              console.log('Attempting to refresh token...');
+              
+              // Use HTTP cookie or try with refresh token from storage
+              const refreshToken = await SecureStore.getItemAsync('refresh_token');
+              const response = await axios.post(
+                `${API_ENDPOINT}/api/auth/refresh-token`, 
+                refreshToken ? { refreshToken } : {}, 
+                { withCredentials: true }
+              );
+              
+              if (!response.data.token) {
+                throw new Error('No token in refresh response');
+              }
+              
+              const { token } = response.data;
+              
+              // Store the new access token
+              await SecureStore.setItemAsync('auth_token', token);
+              failedRefreshAttempt = false;
+              
+              // Notify listeners about successful token refresh
+              authEvents.emit({ type: 'token_refreshed', token });
+              
+              return token;
+            } catch (error) {
+              console.error('Token refresh failed', error);
+              failedRefreshAttempt = true;
+              
+              // Notify listeners about failed token refresh
+              authEvents.emit({ type: 'refresh_failed', error });
+              
+              throw error;
+            } finally {
+              refreshTokenPromise = null;
+            }
+          })();
         }
         
-        const response = await axios.post(`${API_ENDPOINT}/api/auth/refresh-token`, {
-          refreshToken,
-        });
+        // Wait for the refresh token operation to complete
+        const newToken = await refreshTokenPromise;
         
-        const { token } = response.data;
-        await SecureStore.setItemAsync('auth_token', token);
+        // Update the failed request with the new token
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
         
-        originalRequest.headers.Authorization = `Bearer ${token}`;
-        return apiClient(originalRequest);
+        // Retry the original request with the new token
+        return axios(originalRequest);
       } catch (refreshError) {
-        await SecureStore.deleteItemAsync('auth_token');
-        await SecureStore.deleteItemAsync('refresh_token');
-        await SecureStore.deleteItemAsync('user');
-        
+        // If refresh token fails, notify AuthContext to handle logout
         return Promise.reject(error);
       }
+    }
+    
+    // If token refresh already failed before, notify about authentication issue
+    if (error.response?.status === 401 && failedRefreshAttempt) {
+      authEvents.emit({ type: 'authentication_required' });
     }
     
     return Promise.reject(error);
   }
 );
+
+// Reset failed refresh state
+export const resetAuthState = () => {
+  failedRefreshAttempt = false;
+};
 
 export default apiClient;
