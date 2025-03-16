@@ -9,8 +9,10 @@ console.log('Using API endpoint:', API_ENDPOINT);
 
 // Keep track of refresh token promise to prevent multiple calls
 let refreshTokenPromise = null;
-// Track failed refresh attempts to avoid infinite refresh loops
-let failedRefreshAttempt = false;
+
+// Track retry attempts
+let refreshRetryCount = 0;
+const MAX_REFRESH_RETRIES = 5;
 
 // Event to notify subscribers about auth state changes
 export const authEvents = {
@@ -81,98 +83,119 @@ apiClient.interceptors.response.use(
     // Handle 401/403 errors that need token refresh
     if ((error.response?.status === 401 || error.response?.status === 403) && 
         !originalRequest._retry && 
-        !skipRetryUrls.some(url => requestUrl.includes(url)) &&
-        !failedRefreshAttempt) {
+        !skipRetryUrls.some(url => requestUrl.includes(url))) {
       
       console.log(`Auth error (${error.response?.status}) detected, attempting refresh...`);
       originalRequest._retry = true;
       
       try {
-        // If a refresh is already in progress, wait for that instead of starting a new one
-        if (!refreshTokenPromise) {
-          refreshTokenPromise = (async () => {
-            try {
-              // Get refresh token
-              const refreshToken = await SecureStore.getItemAsync('refresh_token');
-              if (!refreshToken) {
-                console.error('No refresh token available for refresh');
-                failedRefreshAttempt = true;
-                authEvents.emit({ type: 'refresh_failed', error: new Error('No refresh token available') });
-                throw new Error('No refresh token available');
-              }
-              
-              console.log('Attempting to refresh token using refresh token...');
-              
-              // Make direct request to avoid interceptors
-              const response = await axios.post(
-                `${API_ENDPOINT}/api/auth/refresh-token`, 
-                { refreshToken }, 
-                { 
-                  withCredentials: true,
-                  timeout: 10000  // 10 seconds timeout for token refresh
+        // Only try to refresh if we haven't reached MAX_REFRESH_RETRIES
+        if (refreshRetryCount < MAX_REFRESH_RETRIES) {
+          refreshRetryCount++;
+          
+          // If a refresh is already in progress, wait for that instead of starting a new one
+          if (!refreshTokenPromise) {
+            refreshTokenPromise = (async () => {
+              try {
+                // Get refresh token
+                const refreshToken = await SecureStore.getItemAsync('refresh_token');
+                if (!refreshToken) {
+                  console.error('No refresh token available for refresh');
+                  // Even without a refresh token, don't mark as failed permanently
+                  // This allows other mechanisms to retry later
+                  
+                  // Just notify about this specific failure
+                  authEvents.emit({ 
+                    type: 'refresh_failed', 
+                    error: new Error('No refresh token available'),
+                    retryCount: refreshRetryCount
+                  });
+                  throw new Error('No refresh token available');
                 }
-              );
-              
-              if (!response.data || !response.data.token) {
-                console.error('Invalid refresh response - no token');
-                throw new Error('No token in refresh response');
+                
+                console.log('Attempting to refresh token using refresh token...');
+                
+                // Make direct request to avoid interceptors
+                const response = await axios.post(
+                  `${API_ENDPOINT}/api/auth/refresh-token`, 
+                  { refreshToken }, 
+                  { 
+                    withCredentials: true,
+                    timeout: 15000  // Longer timeout for token refresh
+                  }
+                );
+                
+                if (!response.data || !response.data.token) {
+                  console.error('Invalid refresh response - no token');
+                  throw new Error('No token in refresh response');
+                }
+                
+                const { token, refreshToken: newRefreshToken } = response.data;
+                console.log('Token refreshed successfully');
+                
+                // Store the new access token
+                await SecureStore.setItemAsync('auth_token', token);
+                
+                // Store the new refresh token if provided
+                if (newRefreshToken) {
+                  console.log('New refresh token received, storing it');
+                  await SecureStore.setItemAsync('refresh_token', newRefreshToken);
+                } else {
+                  console.log('No new refresh token provided, keeping existing one');
+                }
+                
+                // Reset failed refresh state
+                refreshRetryCount = 0;
+                
+                // Notify listeners about successful token refresh
+                authEvents.emit({ type: 'token_refreshed', token });
+                
+                return token;
+              } catch (error) {
+                console.error('Token refresh request failed:', error.message);
+                
+                // Notify listeners about failed token refresh, but include retry count
+                authEvents.emit({ 
+                  type: 'refresh_failed', 
+                  error,
+                  retryCount: refreshRetryCount
+                });
+                
+                throw error;
+              } finally {
+                refreshTokenPromise = null;
               }
-              
-              const { token, refreshToken: newRefreshToken } = response.data;
-              console.log('Token refreshed successfully');
-              
-              // Store the new access token
-              await SecureStore.setItemAsync('auth_token', token);
-              
-              // Store the new refresh token if provided
-              if (newRefreshToken) {
-                console.log('New refresh token received, storing it');
-                await SecureStore.setItemAsync('refresh_token', newRefreshToken);
-              } else {
-                console.log('No new refresh token provided, keeping existing one');
-              }
-              
-              failedRefreshAttempt = false;
-              
-              // Notify listeners about successful token refresh
-              authEvents.emit({ type: 'token_refreshed', token });
-              
-              return token;
-            } catch (error) {
-              console.error('Token refresh request failed:', error.message);
-              failedRefreshAttempt = true;
-              
-              // Notify listeners about failed token refresh
-              authEvents.emit({ type: 'refresh_failed', error });
-              
-              throw error;
-            } finally {
-              refreshTokenPromise = null;
-            }
-          })();
+            })();
+          }
+          
+          // Wait for the refresh token operation to complete
+          const newToken = await refreshTokenPromise;
+          
+          // Update the failed request with the new token
+          originalRequest.headers.Authorization = `Bearer ${newToken}`;
+          console.log('Retrying request with new token');
+          
+          // Retry the original request with the new token
+          return axios(originalRequest);
+        } else {
+          console.warn(`Max refresh retries (${MAX_REFRESH_RETRIES}) reached, notifying auth system`);
+          // Notify about auth issues, but don't permanently mark as failed
+          authEvents.emit({ 
+            type: 'authentication_required',
+            retryCount: refreshRetryCount
+          });
+          // Still throw the original error so the request fails
+          throw error;
         }
-        
-        // Wait for the refresh token operation to complete
-        const newToken = await refreshTokenPromise;
-        
-        // Update the failed request with the new token
-        originalRequest.headers.Authorization = `Bearer ${newToken}`;
-        console.log('Retrying request with new token');
-        
-        // Retry the original request with the new token
-        return axios(originalRequest);
       } catch (refreshError) {
-        console.error('Token refresh failed completely:', refreshError.message);
+        console.error('Token refresh failed:', refreshError.message);
         // Notify AuthContext about authentication issue
-        authEvents.emit({ type: 'authentication_required' });
+        authEvents.emit({ 
+          type: 'authentication_required',
+          retryCount: refreshRetryCount
+        });
         return Promise.reject(error);
       }
-    }
-    
-    // If token refresh already failed before, notify about authentication issue
-    if ((error.response?.status === 401 || error.response?.status === 403) && failedRefreshAttempt) {
-      console.log('Authentication issue after failed refresh, notifying auth system');
-      authEvents.emit({ type: 'authentication_required' });
     }
     
     if (error.response?.status === 403 && error.response.data?.error?.includes('not a member of this family')) {
@@ -185,9 +208,9 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Reset failed refresh state
+// Reset auth state resets retry count too
 export const resetAuthState = () => {
-  failedRefreshAttempt = false;
+  refreshRetryCount = 0;
 };
 
 export default apiClient;

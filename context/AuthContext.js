@@ -7,7 +7,6 @@ import { Platform } from 'react-native';
 import apiClient, { authEvents, resetAuthState } from '../app/api/client';
 import { Alert } from 'react-native';
 import { router } from 'expo-router';
-import { ScreenStackHeaderRightView } from 'react-native-screens';
 
 // Fallback in case env variable isn't loaded
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
@@ -40,26 +39,38 @@ export const AuthProvider = ({ children }) => {
           break;
           
         case 'refresh_failed':
-          // Log the user out if refresh failed and show message
-          logout(false).then(() => {
+          // Instead of logging out immediately, try to refresh silently
+          console.log('Token refresh failed, will retry silently in background');
+          
+          // Only show the session expired message if we've tried multiple times
+          if (event.retryCount && event.retryCount > 3) {
             Alert.alert(
-              "Session Expired",
-              "Your session has expired. Please log in again.",
-              [
-                { text: "OK", onPress: () => router.replace('/(auth)/login') }
-              ]
+              "Session Issue",
+              "We're having trouble maintaining your session. You'll stay logged in, but some features may be limited.",
+              [{ text: "OK" }]
             );
-          });
+          }
           break;
           
         case 'authentication_required':
           // If we're not already handling auth, handle it
           if (!isRefreshing.current) {
             isRefreshing.current = true;
-            refreshUserSession().finally(() => {
-              isRefreshing.current = false;
-            });
+            refreshUserSession()
+              .catch(error => {
+                console.log('Failed to refresh session, but keeping user logged in:', error.message);
+                // Don't log out automatically - just keep the current state
+              })
+              .finally(() => {
+                isRefreshing.current = false;
+              });
           }
+          break;
+          
+        case 'family_access_denied':
+          // Handle family access denied events by refreshing families data
+          console.log('Family access denied event received');
+          // The FamilyContext will handle this through its own subscription
           break;
       }
     });
@@ -107,13 +118,18 @@ export const AuthProvider = ({ children }) => {
                 const response = await axios.post(
                   `${API_ENDPOINT}/api/auth/refresh-token`,
                   { refreshToken },
-                  { timeout: 8000 }
+                  { timeout: 15000 }
                 );
                 
                 if (response.data.token) {
                   console.log('Token refreshed successfully');
                   const newToken = response.data.token;
                   await SecureStore.setItemAsync('auth_token', newToken);
+                  
+                  // Store new refresh token if provided
+                  if (response.data.refreshToken) {
+                    await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
+                  }
                   
                   setToken(newToken);
                   axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
@@ -128,15 +144,36 @@ export const AuthProvider = ({ children }) => {
                     }
                   } catch (userError) {
                     console.error('Failed to fetch user profile after token refresh:', userError);
-                    await logout(false);
+                    // Continue with session anyway
+                    console.log('Continuing without fresh user profile data');
+                    
+                    // Use stored user data if available
+                    if (storedUser) {
+                      setUser(JSON.parse(storedUser));
+                    }
                   }
                 } else {
                   console.log('Token refresh failed - no token in response');
-                  await logout(false);
+                  // Even without a successful refresh, keep the user logged in with the existing token
+                  // It might still work for some API calls
+                  setToken(storedToken);
+                  
+                  // Use stored user data if available
+                  if (storedUser) {
+                    setUser(JSON.parse(storedUser));
+                  }
                 }
               } catch (refreshError) {
                 console.error('Failed to refresh token on startup:', refreshError);
-                await logout(false);
+                
+                // Even with refresh failure, keep the user logged in with the existing token
+                // Some API calls might still work, and we can try refreshing again later
+                setToken(storedToken);
+                
+                // Use stored user data if available
+                if (storedUser) {
+                  setUser(JSON.parse(storedUser));
+                }
                 
                 // Restore original headers if refresh fails
                 if (tempHeaders) {
@@ -146,8 +183,15 @@ export const AuthProvider = ({ children }) => {
                 }
               }
             } else {
-              console.log('No refresh token available, clearing auth state');
-              await logout(false);
+              console.log('No refresh token available, but keeping user logged in');
+              // We'll still keep the user logged in with the potentially expired token
+              // It might still work for some API calls, and the user can manually log in if needed
+              setToken(storedToken);
+              
+              // Use stored user data if available
+              if (storedUser) {
+                setUser(JSON.parse(storedUser));
+              }
               
               // Restore original headers if no refresh token
               if (tempHeaders) {
@@ -162,7 +206,7 @@ export const AuthProvider = ({ children }) => {
         }
       } catch (e) {
         console.error('Failed to load auth state:', e);
-        await logout(false);
+        // Don't automatically log out - let the user continue with whatever state we have
       } finally {
         setLoading(false);
         setAuthInitialized(true);
@@ -177,7 +221,8 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     if (!token) return;
     
-    const tokenRefreshInterval = 15 * 60 * 1000; // 15 minutes
+    // Change from 15 minutes to several hours
+    const tokenRefreshInterval = 8 * 60 * 60 * 1000; // 8 hours
     
     const refreshIfNeeded = async () => {
       const now = Date.now();
@@ -187,33 +232,29 @@ export const AuthProvider = ({ children }) => {
       if (timeSinceLastCheck > tokenRefreshInterval && !isRefreshing.current) {
         isRefreshing.current = true;
         try {
-          // Make a lightweight request to check token validity
-          await apiClient.get('/api/dashboard/profile');
-          lastAuthCheck.current = now;
+          // Instead of validating with a profile request, just try to refresh the token
+          // This allows seamless background refreshes even if the current token is expired
+          await refreshUserSession();
+          console.log('Proactive token refresh successful');
         } catch (error) {
-          if (error.response?.status === 401) {
-            console.log('Token expired, attempting refresh...');
-            // This will trigger our interceptor's refresh logic
-            try {
-              await refreshUserSession();
-            } catch (refreshError) {
-              console.error('Auto refresh failed:', refreshError);
-              // Logout will be handled by the event system
-            }
-          }
+          console.error('Proactive token refresh failed:', error.message);
+          // But we don't log the user out - just keep them signed in with current tokens
         } finally {
           isRefreshing.current = false;
         }
       }
     };
 
-    // Initial check
-    refreshIfNeeded();
+    // Initial check after a delay to ensure app is fully loaded
+    const initialTimer = setTimeout(refreshIfNeeded, 30000);
     
-    // Set up interval
-    const intervalId = setInterval(refreshIfNeeded, 60 * 1000); // Check every minute
+    // Then check periodically, but not too often (every 2 hours)
+    const intervalId = setInterval(refreshIfNeeded, 2 * 60 * 60 * 1000); 
     
-    return () => clearInterval(intervalId);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(intervalId);
+    };
   }, [token]);
 
   // Proactively refresh the user session
@@ -232,7 +273,10 @@ export const AuthProvider = ({ children }) => {
       const response = await axios.post(
         `${API_ENDPOINT}/api/auth/refresh-token`,
         { refreshToken },
-        { withCredentials: true }
+        { 
+          withCredentials: true,
+          timeout: 15000 // Longer timeout for token refresh
+        }
       );
       
       if (!response.data || !response.data.token) {
@@ -255,11 +299,16 @@ export const AuthProvider = ({ children }) => {
       // Update axios defaults
       axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
       
-      // Refresh user data
-      const userResponse = await apiClient.get('/api/dashboard/profile');
-      if (userResponse.data) {
-        setUser(userResponse.data);
-        await SecureStore.setItemAsync('user', JSON.stringify(userResponse.data));
+      // Refresh user data but don't fail if it doesn't work
+      try {
+        const userResponse = await apiClient.get('/api/dashboard/profile');
+        if (userResponse.data) {
+          setUser(userResponse.data);
+          await SecureStore.setItemAsync('user', JSON.stringify(userResponse.data));
+        }
+      } catch (userError) {
+        console.warn('Could not refresh user profile, but continuing with token refresh');
+        // Don't fail the token refresh just because we couldn't get the profile
       }
       
       lastAuthCheck.current = Date.now();
@@ -267,12 +316,10 @@ export const AuthProvider = ({ children }) => {
       
       return true;
     } catch (error) {
-      console.error('Session refresh failed:', error);
+      console.error('Session refresh failed:', error.message);
       
-      // If refreshing fails, we'll need to log the user out
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        await logout(false);
-      }
+      // IMPORTANT: Don't log out the user on refresh failures
+      // Instead, keep the existing tokens and try again later
       
       throw error;
     } finally {
@@ -528,4 +575,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
