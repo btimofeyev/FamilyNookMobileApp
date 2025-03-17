@@ -8,6 +8,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import axios from 'axios';
 import { API_URL } from '@env';
+import { useFamily } from '../../context/FamilyContext';
 
 // Fallback in case env variable isn't loaded
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
@@ -18,6 +19,7 @@ export default function LoginScreen() {
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
   const { login, loading, error } = useAuth();
+  const { families, refreshFamilies, loading: familyLoading } = useFamily();
   const router = useRouter();
 
   useEffect(() => {
@@ -88,11 +90,78 @@ export default function LoginScreen() {
     if (!validateInputs()) return;
 
     const result = await login(email, password);
-    console.log('Login result:', result);
+    console.log('Login result - ignoring family_id as it is not reliable:', result);
     
     if (result.success) {
-      console.log('Login successful, redirecting to feed...');
-      router.replace('/(tabs)/feed');
+      try {
+        // Start loading families
+        console.log('Starting family refresh...');
+        await refreshFamilies();
+        
+        // Get the initial families data
+        const response = await axios.get(`${API_ENDPOINT}/api/dashboard/user/families`);
+        console.log('Direct families API response:', response.data);
+        
+        if (response.data && response.data.length > 0) {
+          console.log('User has families from direct API check:', response.data);
+          setTimeout(() => {
+            router.push('/(tabs)/feed');
+          }, 100);
+          return;
+        }
+        
+        // If no families found in direct check, wait for context to update
+        let attempts = 0;
+        const maxAttempts = 50; // 5 seconds max
+        
+        while (attempts < maxAttempts) {
+          // Wait a bit between checks
+          await new Promise(resolve => setTimeout(resolve, 100));
+          attempts++;
+          
+          // Skip if still loading
+          if (familyLoading) {
+            console.log('Still loading families in context, waiting... (attempt', attempts, 'of', maxAttempts, ')');
+            continue;
+          }
+          
+          // Check context data
+          if (families && families.length > 0) {
+            console.log('Found families in context:', families);
+            setTimeout(() => {
+              router.push('/(tabs)/feed');
+            }, 100);
+            return;
+          }
+          
+          // If loading is complete and no families found, break
+          if (!familyLoading) {
+            console.log('Family loading complete, no families found');
+            break;
+          }
+        }
+        
+        // If we get here, no families were found
+        console.log('No families found after all checks, proceeding to family setup');
+        setTimeout(() => {
+          router.push('/(auth)/family-setup');
+        }, 100);
+        
+      } catch (error) {
+        console.error('Error checking families:', error);
+        // Even on error, check the context one last time
+        if (families && families.length > 0) {
+          console.log('Found families in error handler:', families);
+          setTimeout(() => {
+            router.push('/(tabs)/feed');
+          }, 100);
+        } else {
+          console.log('No families found in error handler, proceeding to setup');
+          setTimeout(() => {
+            router.push('/(auth)/family-setup');
+          }, 100);
+        }
+      }
     }
   };
 

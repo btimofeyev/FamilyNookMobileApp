@@ -286,7 +286,6 @@ export default function FeedScreen() {
 
       try {
         const response = await getFamilyPosts(familyId, currentPage);
-        console.log("Posts API Response:", JSON.stringify(response));
 
         const newPosts = response.posts || [];
 

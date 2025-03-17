@@ -1,5 +1,5 @@
 // app/components/CreatePostForm.js
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   TextInput, 
@@ -25,7 +25,52 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
   const [media, setMedia] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showMediaOptions, setShowMediaOptions] = useState(false);
+  const [youtubePreview, setYoutubePreview] = useState(null);
   const videoRef = useRef(null);
+
+  // Check caption for YouTube links on change
+  useEffect(() => {
+    detectYouTubeLink(caption);
+  }, [caption]);
+
+  const detectYouTubeLink = (text) => {
+    // Reset YouTube preview if caption is empty
+    if (!text || text.trim() === '') {
+      setYoutubePreview(null);
+      return;
+    }
+
+    // Look for YouTube links in text
+    const youtubeRegex = /(?:https?:\/\/)?(?:www\.)?(?:youtube\.com\/(?:[^\/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
+    const match = text.match(youtubeRegex);
+    
+    if (match) {
+      const url = match[0];
+      const videoId = extractYouTubeVideoId(url);
+      
+      if (videoId) {
+        // Set preview data
+        setYoutubePreview({
+          videoId,
+          url,
+          thumbnail: `https://img.youtube.com/vi/${videoId}/0.jpg`
+        });
+        
+        // Provide haptic feedback to indicate link detection
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        setYoutubePreview(null);
+      }
+    } else {
+      setYoutubePreview(null);
+    }
+  };
+
+  const extractYouTubeVideoId = (url) => {
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11) ? match[2] : null;
+  };
 
   const pickImage = async () => {
     try {
@@ -90,23 +135,33 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
   };
 
   const handleSubmit = async () => {
-    if (!caption.trim() && !media) {
-      Alert.alert('Error', 'Please add a caption or media to your post');
+    if (!caption.trim() && !media && !youtubePreview) {
+      Alert.alert('Error', 'Please add a caption, media, or link to your post');
       return;
     }
 
     setIsSubmitting(true);
     try {
+      // If we're posting a YouTube link, make sure the full URL is in the caption
+      // This ensures the backend can detect and process it correctly
+      let finalCaption = caption;
+      
+      // Don't include any modifications for submission - let the backend handle it
+      // The full URL is needed for proper link preview generation
+
       await createPost(familyId, { 
-        caption, 
+        caption: finalCaption, 
         media,
         mediaType: media ? (media.isVideo ? 'video' : 'image') : null 
       });
+      
       onPostCreated();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
       // Reset form
       setCaption('');
       setMedia(null);
+      setYoutubePreview(null);
     } catch (error) {
       console.error('Error creating post:', error);
       Alert.alert('Error', 'Failed to create post. Please try again.');
@@ -163,6 +218,42 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
     );
   };
 
+  const renderYoutubePreview = () => {
+    if (!youtubePreview) return null;
+
+    return (
+      <View style={styles.youtubePreview}>
+        <Image 
+          source={{ uri: youtubePreview.thumbnail }}
+          style={styles.youtubeThumbnail}
+          resizeMode="cover"
+        />
+        
+        <View style={styles.youtubeOverlay}>
+          <View style={styles.youtubePlayIcon}>
+            <Ionicons name="logo-youtube" size={28} color="#FF0000" />
+          </View>
+        </View>
+        
+        <View style={styles.youtubeInfo}>
+          <Text style={styles.youtubeLabel}>YouTube Video</Text>
+          <TouchableOpacity 
+            style={styles.removeYoutubeButton}
+            onPress={() => {
+              // Remove the YouTube link from the caption
+              const updatedCaption = caption.replace(youtubePreview.url, '').trim();
+              setCaption(updatedCaption);
+              setYoutubePreview(null);
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            }}
+          >
+            <Text style={styles.removeYoutubeText}>Remove</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       {renderBackground()}
@@ -179,6 +270,7 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
       />
       
       {renderMediaPreview()}
+      {renderYoutubePreview()}
       
       {showMediaOptions && (
         <View style={styles.mediaOptionsContainer}>
@@ -231,11 +323,11 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
           <TouchableOpacity 
             style={styles.postButtonContainer}
             onPress={handleSubmit}
-            disabled={(!caption.trim() && !media) || isSubmitting}
+            disabled={(!caption.trim() && !media && !youtubePreview) || isSubmitting}
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={(!caption.trim() && !media) || isSubmitting ? 
+              colors={(!caption.trim() && !media && !youtubePreview) || isSubmitting ? 
                 ['rgba(30, 43, 47, 0.5)', 'rgba(59, 175, 188, 0.5)'] : 
                 ['#1E2B2F', '#3BAFBC']}
               start={{ x: 0, y: 0 }}
@@ -265,8 +357,8 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     marginBottom: 16,
-    overflow: 'hidden', // For BlurView to work correctly
-    position: 'relative', // For absolute positioning of the BlurView
+    overflow: 'hidden',
+    position: 'relative',
   },
   input: {
     minHeight: 100,
@@ -333,6 +425,61 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     fontWeight: '500',
     letterSpacing: -0.2, // Apple-style tight letter spacing
+  },
+  // YouTube preview styles
+  youtubePreview: {
+    marginBottom: 16,
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#1E2B2F', // Midnight Green
+    borderWidth: 1,
+    borderColor: 'rgba(59, 175, 188, 0.2)', // Subtle Teal Glow border
+    zIndex: 1,
+  },
+  youtubeThumbnail: {
+    width: '100%',
+    height: 180, // 16:9 aspect ratio approximately
+    backgroundColor: '#121212', // Fallback background
+  },
+  youtubeOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    zIndex: 2,
+    height: 180, // Match thumbnail height
+  },
+  youtubePlayIcon: {
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  youtubeInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+  },
+  youtubeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#F5F5F7', // Soft White
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  removeYoutubeButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255, 69, 58, 0.1)', // Very subtle red
+    borderRadius: 4,
+  },
+  removeYoutubeText: {
+    fontSize: 12,
+    color: '#FF453A', // iOS system red
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   actions: {
     flexDirection: 'row',

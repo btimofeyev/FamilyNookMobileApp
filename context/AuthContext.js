@@ -30,7 +30,7 @@ export const AuthProvider = ({ children }) => {
   // Setup auth event listeners
   useEffect(() => {
     const unsubscribe = authEvents.subscribe((event) => {
-      console.log('Auth event:', event.type);
+
       
       switch (event.type) {
         case 'token_refreshed':
@@ -39,9 +39,7 @@ export const AuthProvider = ({ children }) => {
           break;
           
         case 'refresh_failed':
-          // Instead of logging out immediately, try to refresh silently
-          console.log('Token refresh failed, will retry silently in background');
-          
+   
           // Only show the session expired message if we've tried multiple times
           if (event.retryCount && event.retryCount > 3) {
             Alert.alert(
@@ -68,9 +66,6 @@ export const AuthProvider = ({ children }) => {
           break;
           
         case 'family_access_denied':
-          // Handle family access denied events by refreshing families data
-          console.log('Family access denied event received');
-          // The FamilyContext will handle this through its own subscription
           break;
       }
     });
@@ -87,7 +82,6 @@ export const AuthProvider = ({ children }) => {
         
         if (storedToken) {
           const refreshToken = await SecureStore.getItemAsync('refresh_token');
-          console.log('Found stored token, refresh token exists:', !!refreshToken);
           
           // Set a temporary header to validate the token
           const tempHeaders = axios.defaults.headers.common['Authorization'];
@@ -183,9 +177,7 @@ export const AuthProvider = ({ children }) => {
                 }
               }
             } else {
-              console.log('No refresh token available, but keeping user logged in');
-              // We'll still keep the user logged in with the potentially expired token
-              // It might still work for some API calls, and the user can manually log in if needed
+
               setToken(storedToken);
               
               // Use stored user data if available
@@ -360,6 +352,11 @@ export const AuthProvider = ({ children }) => {
       const { token: authToken, user: userData, refreshToken } = response.data;
       console.log('Login successful, storing tokens...');
       
+      // Additional check for user's family status
+      const hasFamily = userData.families && userData.families.length > 0 || 
+                        userData.primary_family_id || 
+                        userData.family_id;
+      
       // Store in secure storage
       await SecureStore.setItemAsync('auth_token', authToken);
       if (refreshToken) {
@@ -370,6 +367,15 @@ export const AuthProvider = ({ children }) => {
       }
       await SecureStore.setItemAsync('user', JSON.stringify(userData));
       
+      // If user has at least one family, set as selected family
+      if (userData.families && userData.families.length > 0) {
+        await SecureStore.setItemAsync('selected_family_id', userData.families[0].family_id.toString());
+      } else if (userData.primary_family_id) {
+        await SecureStore.setItemAsync('selected_family_id', userData.primary_family_id.toString());
+      } else if (userData.family_id) {
+        await SecureStore.setItemAsync('selected_family_id', userData.family_id.toString());
+      }
+      
       // Update state
       setToken(authToken);
       setUser(userData);
@@ -379,7 +385,11 @@ export const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
       lastAuthCheck.current = Date.now();
       
-      return { success: true, isNewUser: response.data.isNewUser };
+      return { 
+        success: true, 
+        isNewUser: response.data.isNewUser,
+        needsFamilySetup: !hasFamily
+      };
     } catch (e) {
       console.error('Login error details:', e.message);
       const message = e.response?.data?.error || 'Login failed. Please try again.';
@@ -399,7 +409,6 @@ export const AuthProvider = ({ children }) => {
       const payload = { name, email, password };
       if (passkey) payload.passkey = passkey;
       
-      console.log('Attempting registration with payload:', { ...payload, password: '****' });
       
       const response = await axios.post(`${API_ENDPOINT}/api/auth/register`, payload);
       

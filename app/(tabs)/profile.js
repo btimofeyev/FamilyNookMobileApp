@@ -12,7 +12,8 @@ import {
   TextInput,
   RefreshControl,
   Image,
-  Platform
+  Platform,
+  FlatList
 } from 'react-native';
 import { useAuth } from '../../context/AuthContext';
 import { useFamily } from '../../context/FamilyContext';
@@ -21,11 +22,51 @@ import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
-import { getUserProfile, inviteToFamily } from '../api/userService';
+import { getUserProfile, inviteToFamily, getFamilyMembers } from '../api/userService';
 import { getFamilyPosts } from '../api/feedService';
 import { generateFamilyPasskey } from '../api/familyService';
 import { BlurView } from 'expo-blur';
 import PostItem from '../components/PostItem';
+
+// Function to get a random color from the app's color palette
+const getRandomColor = () => {
+  // Dark mode-friendly vibrant colors that complement the app's dark theme
+  const colors = [
+    '#FF4F5E', // Red
+    '#FF7C1E', // Orange
+    '#FBC02D', // Yellow
+    '#0FCC45', // Green
+    '#00C2FF', // Cyan
+    '#5371E9', // Blue
+    '#AA58CB', // Purple
+    '#FF5995', // Pink
+    '#49C7B8', // Teal
+    '#04B9A3', // Mint
+    '#00A5E0', // Sky blue
+    '#FFB746'  // Amber
+  ];
+  
+  return colors[Math.floor(Math.random() * colors.length)];
+};
+
+// Store colors in a Map to assign consistent colors to each user
+const colorMap = new Map();
+
+// Function to generate avatar properties with consistent random colors
+const getAvatarProperties = (name) => {
+  // Get first letter or use a default
+  const firstLetter = name && name.length > 0 ? name.charAt(0).toUpperCase() : '?';
+  
+  // Get or generate color for this user
+  if (!colorMap.has(name)) {
+    colorMap.set(name, getRandomColor());
+  }
+  
+  return {
+    backgroundColor: colorMap.get(name),
+    letter: firstLetter
+  };
+};
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -35,6 +76,7 @@ export default function ProfileScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [userPosts, setUserPosts] = useState([]);
+  const [familyMembers, setFamilyMembers] = useState([]);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
@@ -62,6 +104,15 @@ export default function ProfileScreen() {
       } catch (error) {
         console.error('Error fetching user profile:', error);
         // Continue with other requests even if this one fails
+      }
+      
+      // Load family members
+      try {
+        const members = await getFamilyMembers(selectedFamily.family_id);
+        setFamilyMembers(members);
+      } catch (error) {
+        console.error('Error fetching family members:', error);
+        // Continue even if family members can't be loaded
       }
       
       // Load posts data
@@ -201,6 +252,42 @@ export default function ProfileScreen() {
       console.error('Error logging out:', error);
       Alert.alert('Error', 'Failed to log out. Please try again.');
     }
+  };
+  
+  const renderFamilyMemberGridItem = (item) => {
+    const isCurrentUser = user && user.id === item.id;
+    
+    // Get color and letter unless user has a profile image
+    const { backgroundColor, letter } = getAvatarProperties(item.name);
+    const hasProfileImage = item.profile_image && item.profile_image !== 'https://via.placeholder.com/150';
+    
+    return (
+      <View style={styles.memberGridItem}>
+        <TouchableOpacity 
+          style={styles.memberCircle}
+          onPress={() => console.log(`Pressed on ${item.name}`)}
+          activeOpacity={0.7}
+        >
+          <View style={[styles.memberAvatar, { backgroundColor: hasProfileImage ? 'transparent' : backgroundColor }]}>
+            {hasProfileImage ? (
+              <Image 
+                source={{ uri: item.profile_image }}
+                style={styles.memberProfileImage}
+              />
+            ) : (
+              <Text style={styles.memberLetter}>{letter}</Text>
+            )}
+          </View>
+        </TouchableOpacity>
+        <Text 
+          style={styles.memberName} 
+          numberOfLines={1}
+        >
+          {item.name.split(' ')[0]}
+          {isCurrentUser ? ' (You)' : ''}
+        </Text>
+      </View>
+    );
   };
   
   // Render invite modal
@@ -346,6 +433,31 @@ export default function ProfileScreen() {
         <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
       </View>
 
+      // Family Members Section
+  {selectedFamily && familyMembers.length > 0 && (
+    <BlurView intensity={10} tint="dark" style={styles.familyMembersSection}>
+      <View style={styles.sectionTitleRow}>
+        <Text style={styles.sectionTitle}>Family Members</Text>
+        <TouchableOpacity onPress={() => setShowInviteModal(true)}>
+          <Text style={styles.inviteButtonText}>+ Invite</Text>
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.familyMembersGridContainer}>
+        <FlatList
+          key="grid-4-column" // Add a key to fix the changing numColumns error
+          data={familyMembers}
+          renderItem={({ item }) => renderFamilyMemberGridItem(item)}
+          keyExtractor={(item) => item.id.toString()}
+          numColumns={4}
+          contentContainerStyle={styles.gridContent}
+          columnWrapperStyle={styles.gridRow}
+          scrollEnabled={false}
+        />
+      </View>
+    </BlurView>
+  )}
+
       {/* Family Selection Section */}
       <BlurView intensity={20} tint="dark" style={styles.section}>
         <View style={styles.sectionTitleRow}>
@@ -401,12 +513,18 @@ export default function ProfileScreen() {
         <View style={styles.managementButtons}>
           <TouchableOpacity 
             style={styles.managementButton}
-            onPress={handleCreateFamily}
+            onPress={() => selectedFamily ? router.push(`/family/${selectedFamily.family_id}`) : null}
+            disabled={!selectedFamily}
           >
-            <View style={styles.iconCircle}>
-              <Ionicons name="add" size={24} color="#FFFFFF" />
+            <View style={[styles.iconCircle, !selectedFamily && styles.disabledIconCircle]}>
+              <Ionicons name="people" size={24} color="#FFFFFF" />
             </View>
-            <Text style={styles.managementButtonText}>Create Family</Text>
+            <Text style={[
+              styles.managementButtonText, 
+              !selectedFamily && styles.disabledText
+            ]}>
+              Family Details
+            </Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -579,13 +697,137 @@ const styles = StyleSheet.create({
     color: '#AEAEB2',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-  section: {
-    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback for when BlurView doesn't work
+  
+  // Family Members Grid Style
+  familyMembersSection: {
+    backgroundColor: 'rgba(18, 18, 18, 0.9)',
     marginBottom: 16,
-    borderRadius: 18,
+    borderRadius: 12,
     margin: 16,
     overflow: 'hidden',
-    padding: 20,
+    padding: 14,
+  },
+  familyMembersGridContainer: {
+    width: '100%',
+    paddingVertical: 4,
+  },
+  gridContent: {
+    alignItems: 'flex-start',
+  },
+  gridRow: {
+    justifyContent: 'space-between',
+    width: '100%',
+    paddingHorizontal: 2,
+  },
+  memberGridItem: {
+    width: '24%',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  memberCircle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 44,
+    height: 44,
+  },
+  memberAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  memberProfileImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  memberLetter: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
+  memberName: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    marginTop: 4,
+    width: '100%',
+  },
+  memberCircle: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 44,
+    height: 44,
+  },
+  memberAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 2,
+    elevation: 3,
+    overflow: 'hidden',
+  },
+  memberProfileImage: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+  },
+  memberLetter: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
+  memberName: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: 'rgba(255, 255, 255, 0.8)',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    marginTop: 6,
+    width: 60, // Fixed width for name to prevent layout shift
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#FFFFFF',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
+  inviteButtonText: {
+    color: '#00C2FF', // Cyan - matches app theme
+    fontWeight: '600',
+    fontSize: 15,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  
+  section: {
+    backgroundColor: 'rgba(18, 18, 18, 0.9)',
+    marginBottom: 16,
+    borderRadius: 12,
+    margin: 16,
+    overflow: 'hidden',
+    padding: 16,
   },
   sectionTitleRow: {
     flexDirection: 'row',
@@ -600,7 +842,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
   },
   addButtonText: {
-    color: '#4CC2C4', // Teal color from the logo
+    color: '#5DADE2', // Light Blue
     fontWeight: '600',
     fontSize: 15,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
@@ -868,11 +1110,5 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-  },
-  errorText: {
-    color: '#FF3B30',
-    fontSize: 16,
-    textAlign: 'center',
-    marginBottom: 20,
   },
 });

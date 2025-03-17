@@ -84,15 +84,12 @@ export const NotificationProvider = ({ children }) => {
     if (isAuthenticated) {
       // Set up notification handlers
       const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-        console.log('Notification received!', notification);
-        // Refresh notifications when a new one is received
+
         fetchNotifications();
       });
 
       const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-        console.log('Notification response received!', response);
-        // Handle notification tap/click here
-        // You might want to navigate to a specific screen based on the notification
+
       });
 
       // Register for push notifications
@@ -114,10 +111,6 @@ export const NotificationProvider = ({ children }) => {
 
     try {
       const data = await getNotifications();
-      
-      // Ensure data has the expected structure with all notification types
-      // (likes, comments, memories, events, etc.)
-      console.log('Notification data:', data);
       
       // Update notifications array with all notification types
       setNotifications(data.notifications || []);

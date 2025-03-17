@@ -1,4 +1,4 @@
-// context/FamilyContext.js
+// context/FamilyContext.js - Fixed version
 import React, { createContext, useState, useContext, useEffect, useCallback, useRef } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import apiClient from '../app/api/client';
@@ -26,7 +26,7 @@ const getUserFamilies = async () => {
 };
 
 export const FamilyProvider = ({ children }) => {
-  const { user, isAuthenticated, token, authInitialized, refreshUserSession, logout } = useAuth();
+  const { user, isAuthenticated, token, authInitialized, refreshUserSession, logout, updateUserInfo } = useAuth();
   const [families, setFamilies] = useState([]);
   const [selectedFamily, setSelectedFamily] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -196,7 +196,20 @@ export const FamilyProvider = ({ children }) => {
         console.log('Setting default family (first in list):', userFamilies[0]);
         setSelectedFamily(userFamilies[0]);
         await SecureStore.setItemAsync('selected_family_id', userFamilies[0].family_id.toString());
+        
+        // Update the user info with the primary family id if updateUserInfo is available
+        if (updateUserInfo && typeof updateUserInfo === 'function') {
+          try {
+            await updateUserInfo({ primary_family_id: userFamilies[0].family_id });
+            console.log('Updated user primary_family_id to:', userFamilies[0].family_id);
+          } catch (updateError) {
+            console.error('Error updating user primary family ID:', updateError);
+            // Continue without updating user info
+          }
+        }
       }
+      
+      setFamiliesInitialized(true);
     } catch (err) {
       console.error('Error loading families:', err);
       
@@ -251,7 +264,7 @@ export const FamilyProvider = ({ children }) => {
       setLoading(false);
       setFamiliesInitialized(true);
     }
-  }, [isAuthenticated, token, refreshUserSession, logout]);
+  }, [isAuthenticated, token, refreshUserSession, logout, updateUserInfo]);
 
   // Load families when auth status changes
   useEffect(() => {
@@ -302,24 +315,38 @@ export const FamilyProvider = ({ children }) => {
       const userFamilies = await getUserFamilies();
       console.log('Refreshed families:', userFamilies);
       
+      // Important: We need to update the families state regardless of the result
+      setFamilies(userFamilies || []);
+      
       if (!userFamilies || userFamilies.length === 0) {
-        setFamilies([]);
+        console.log('No families returned from API, clearing family selection');
         setSelectedFamily(null);
         await SecureStore.deleteItemAsync('selected_family_id');
         return;
       }
       
-      setFamilies(userFamilies);
+      // If selected family no longer exists in the user's accessible families,
+      // default to the first family in the list
+      const savedFamilyId = await SecureStore.getItemAsync('selected_family_id');
       
-      // If selected family no longer exists, default to first family
-      if (!selectedFamily || !userFamilies.some(f => f.family_id === selectedFamily.family_id)) {
-        if (userFamilies.length > 0) {
-          setSelectedFamily(userFamilies[0]);
-          await SecureStore.setItemAsync('selected_family_id', userFamilies[0].family_id.toString());
-        } else {
-          setSelectedFamily(null);
-          await SecureStore.deleteItemAsync('selected_family_id');
-        }
+      // First check if the currently selected family exists and is in the user's families
+      if (selectedFamily && userFamilies.some(f => 
+        f.family_id.toString() === selectedFamily.family_id.toString())) {
+        console.log('Currently selected family is still valid');
+      } 
+      // Then check if there's a saved family ID that exists in the user's families
+      else if (savedFamilyId && userFamilies.some(f => 
+        f.family_id.toString() === savedFamilyId)) {
+        const familyToSelect = userFamilies.find(f => 
+          f.family_id.toString() === savedFamilyId);
+        console.log('Setting saved family:', familyToSelect);
+        setSelectedFamily(familyToSelect);
+      } 
+      // Otherwise, default to the first family
+      else if (userFamilies.length > 0) {
+        console.log('Setting default (first) family:', userFamilies[0]);
+        setSelectedFamily(userFamilies[0]);
+        await SecureStore.setItemAsync('selected_family_id', userFamilies[0].family_id.toString());
       }
     } catch (err) {
       console.error('Error refreshing families:', err);
@@ -383,6 +410,18 @@ export const FamilyProvider = ({ children }) => {
       if (createdFamily) {
         setSelectedFamily(createdFamily);
         await SecureStore.setItemAsync('selected_family_id', createdFamily.family_id.toString());
+        
+        // Update the user info with the primary family id if updateUserInfo is available
+        if (updateUserInfo && typeof updateUserInfo === 'function') {
+          try {
+            await updateUserInfo({ primary_family_id: createdFamily.family_id });
+            console.log('Updated user primary_family_id to:', createdFamily.family_id);
+          } catch (updateError) {
+            console.error('Error updating user primary family ID:', updateError);
+            // Continue without updating user info
+          }
+        }
+        
         return createdFamily;
       } else {
         throw new Error('Created family not found in updated list');
@@ -428,6 +467,49 @@ export const FamilyProvider = ({ children }) => {
     }
   };
 
+  // Helper function to determine if user has a family
+  const determineUserHasFamily = () => {
+    // First and most reliable check: does the user have actual families loaded in state?
+    if (familiesInitialized && families && families.length > 0) {
+      return true;
+    }
+    
+    // If no families in state, check user object for families
+    if (user && user.families && user.families.length > 0) {
+      // Double check that we don't have state families that contradict this
+      if (familiesInitialized && (!families || families.length === 0)) {
+        console.log('Warning: User has families in user object but not in families state');
+        // If we have initialized families and they're empty, trust that over the user object
+        return false;
+      }
+      return true;
+    }
+    
+    // Check if user has primary_family_id
+    if (user && user.primary_family_id) {
+      // Double check that we don't have state families that contradict this
+      if (familiesInitialized && (!families || families.length === 0)) {
+        console.log('Warning: User has primary_family_id but not in families state');
+        // If we have initialized families and they're empty, trust that over the user object
+        return false;
+      }
+      return true;
+    }
+    
+    // Backward compatibility check for family_id
+    if (user && user.family_id) {
+      // Double check that we don't have state families that contradict this
+      if (familiesInitialized && (!families || families.length === 0)) {
+        console.log('Warning: User has family_id but not in families state');
+        // If we have initialized families and they're empty, trust that over the user object
+        return false;
+      }
+      return true;
+    }
+    
+    return false;
+  };
+
   return (
     <FamilyContext.Provider
       value={{
@@ -438,9 +520,10 @@ export const FamilyProvider = ({ children }) => {
         switchFamily,
         refreshFamilies,
         createAndSelectFamily,
-        hasFamilies: families.length > 0,
+        hasFamilies: determineUserHasFamily(),
         familiesInitialized,
-        retryLoadFamilies: forceRefreshFamilies
+        retryLoadFamilies: forceRefreshFamilies,
+        determineUserHasFamily
       }}
     >
       {children}

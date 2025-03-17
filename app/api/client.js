@@ -4,7 +4,7 @@ import { API_URL } from '@env';
 
 // Use environment variable with fallback
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
-console.log('Using API endpoint:', API_ENDPOINT);
+
 
 // Keep track of refresh token promise to prevent multiple calls
 let refreshTokenPromise = null;
@@ -41,16 +41,14 @@ apiClient.interceptors.request.use(
         config.url === '/api/auth/login' ||
         config.url === '/api/auth/register' ||
         config.url.startsWith('/api/invitations/check/')) {
-      console.log(`API Request: ${config.method} ${config.url} (no auth)`);
       return config;
     }
     
     const token = await SecureStore.getItemAsync('auth_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
-      console.log(`API Request: ${config.method} ${config.url} (with auth)`);
     } else {
-      console.log(`API Request: ${config.method} ${config.url} (no token available)`);
+
     }
     return config;
   },
@@ -63,7 +61,6 @@ apiClient.interceptors.request.use(
 // Add response logging middleware
 apiClient.interceptors.response.use(
   (response) => {
-    console.log(`API Response: ${response.status} from ${response.config.url}`);
     return response;
   },
   async (error) => {
@@ -84,7 +81,6 @@ apiClient.interceptors.response.use(
     !originalRequest._retry && 
     !skipRetryUrls.some(url => requestUrl.includes(url))) {
   
-  console.log(`Auth error (${error.response?.status}) detected, checking if refresh is appropriate...`);
   
   // IMPORTANT: First check if this is a new account in setup phase
   const registrationTime = await SecureStore.getItemAsync('registration_time');
@@ -93,7 +89,6 @@ apiClient.interceptors.response.use(
   
   // If this is a recent registration, don't attempt refresh at all
   if (isRecentRegistration) {
-    console.log('New account in setup phase detected, skipping token refresh');
     return Promise.reject(error); // Just return the original error
   }
   
@@ -117,9 +112,6 @@ apiClient.interceptors.response.use(
                 const refreshToken = await SecureStore.getItemAsync('refresh_token');
                 if (!refreshToken) {
                   if (isRecentRegistration) {
-                    console.log('Fresh registration detected, skipping token refresh');
-                    // For new registrations, we'll handle this differently
-                    
                     // Notify about missing refresh token but note it's a new registration
                     authEvents.emit({ 
                       type: 'new_registration',
@@ -136,8 +128,7 @@ apiClient.interceptors.response.use(
                   }
                   throw new Error('No refresh token available');
                 }
-                
-                console.log('Attempting to refresh token using refresh token...');
+              
                 
                 // Make direct request to avoid interceptors
                 const response = await axios.post(
@@ -182,8 +173,6 @@ apiClient.interceptors.response.use(
                   (Date.now() - parseInt(registrationTime)) < 30000; // 30 seconds
                 
                 if (isRecentRegistration && error.message === 'No refresh token available') {
-                  // For fresh registrations, don't log this as an error
-                  console.log('Token refresh not available for new registration');
                 } else {
                   console.error('Token refresh request failed:', error.message);
                   
@@ -220,8 +209,6 @@ apiClient.interceptors.response.use(
             
             // If it's a fresh registration with no refresh token, we'll still proceed without refresh
             if (isRecentRegistration && waitError.message === 'No refresh token available') {
-              // For requests right after registration, we'll let them continue with the existing token
-              console.log('Continuing with original token for new registration');
               return Promise.reject(error);
             }
             

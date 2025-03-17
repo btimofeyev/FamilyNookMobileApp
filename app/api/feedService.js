@@ -22,11 +22,8 @@ export const getFamilyPosts = async (familyId, page = 1) => {
     }
   }
   
-  console.log(`getFamilyPosts called for family ID: ${familyId}, page: ${page}`);
-  
   try {
-    console.log(`Making API request to: /api/family/${familyId}/posts`);
-    
+ 
     // Add a longer timeout for post loading to handle potentially larger responses
     const response = await apiClient.get(`/api/family/${familyId}/posts`, {
       params: { page },
@@ -42,9 +39,7 @@ export const getFamilyPosts = async (familyId, page = 1) => {
         totalPosts: 0 
       };
     }
-    
-    console.log('API Response status:', response.status);
-    console.log('API Response data shape:', Object.keys(response.data));
+
     
     return {
       posts: response.data.posts || response.data || [], // Handle different response structures
@@ -104,8 +99,7 @@ export const createPost = async (familyId, data) => {
       // Increase timeout for media upload
       timeout: 60000 // 60 seconds
     });
-    
-    console.log('Create post response:', response.data);
+
     return response.data;
   } catch (error) {
     console.error('Error creating post:', error);
@@ -121,9 +115,9 @@ export const createPost = async (familyId, data) => {
 
 export const toggleLike = async (postId) => {
   try {
-    console.log(`Toggling like for post ${postId}`);
+
     const response = await apiClient.post(`/api/posts/${postId}/like`);
-    console.log('Toggle like response:', response.data);
+
     return response.data;
   } catch (error) {
     console.error('Error toggling like:', error);
@@ -133,9 +127,7 @@ export const toggleLike = async (postId) => {
 
 export const getComments = async (postId) => {
   try {
-    console.log(`Fetching comments for post ${postId}`);
     const response = await apiClient.get(`/api/posts/${postId}/comments`);
-    console.log('Get comments response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error fetching comments:', error);
@@ -145,7 +137,6 @@ export const getComments = async (postId) => {
 
 export const addComment = async (postId, text, parentCommentId = null) => {
   try {
-    console.log(`Adding comment to post ${postId}:`, { text, parentCommentId });
     
     const payload = { text };
     
@@ -155,7 +146,6 @@ export const addComment = async (postId, text, parentCommentId = null) => {
     }
     
     const response = await apiClient.post(`/api/posts/${postId}/comment`, payload);
-    console.log('Add comment response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error adding comment:', error);
