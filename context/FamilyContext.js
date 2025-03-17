@@ -39,9 +39,20 @@ export const FamilyProvider = ({ children }) => {
   const maxRetries = 3;
   
   // Function to determine if we should retry based on time and count
-  const shouldRetry = () => {
+  const shouldRetry = async () => {
     const now = Date.now();
     const timeSinceLastRetry = now - lastRetryTime.current;
+    
+    // Check if this is a fresh registration
+    const registrationTime = await SecureStore.getItemAsync('registration_time');
+    const isRecentRegistration = registrationTime && 
+      (Date.now() - parseInt(registrationTime)) < 30000; // 30 seconds
+    
+    // Don't retry for recent registrations - it's expected they have no families yet
+    if (isRecentRegistration) {
+      console.log('Recent registration detected, skipping family data retry');
+      return false;
+    }
     
     // Only retry if it's been at least 3 seconds since the last retry
     // and we haven't exceeded max retries
@@ -72,32 +83,73 @@ export const FamilyProvider = ({ children }) => {
       setFamiliesInitialized(true);
       return;
     }
-
+  
     try {
       console.log('Loading families for authenticated user');
       setLoading(true);
       setError(null);
       
+      // Check if this is a fresh registration before trying to refresh
+      const registrationTime = await SecureStore.getItemAsync('registration_time');
+      const isNewAccount = await SecureStore.getItemAsync('is_new_account');
+      const isRecentRegistration = registrationTime && 
+        (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000; // 5 minutes
+        
+      // For new accounts, handle specially
+      if (isNewAccount === 'true' && isRecentRegistration) {
+        console.log('New account detected, checking if family_id already exists');
+        
+        // Check if the user already has a family_id in storage
+        const userData = await SecureStore.getItemAsync('user');
+        if (userData) {
+          const parsedUser = JSON.parse(userData);
+          if (parsedUser.family_id) {
+            console.log('User already has family_id in storage:', parsedUser.family_id);
+            
+            // Create a synthetic family object
+            const syntheticFamily = {
+              family_id: parsedUser.family_id,
+              family_name: 'My Family' // Default name until we load the real one
+            };
+            
+            setFamilies([syntheticFamily]);
+            setSelectedFamily(syntheticFamily);
+            await SecureStore.setItemAsync('selected_family_id', syntheticFamily.family_id.toString());
+            
+            // Still try to get actual family data in the background
+            try {
+              const userFamilies = await getUserFamilies();
+              if (userFamilies && userFamilies.length > 0) {
+                setFamilies(userFamilies);
+                
+                // Update selected family with complete info
+                const actualFamily = userFamilies.find(f => f.family_id.toString() === parsedUser.family_id.toString());
+                if (actualFamily) {
+                  setSelectedFamily(actualFamily);
+                }
+              }
+            } catch (bgError) {
+              console.log('Background family data load failed, using synthetic family');
+            }
+            
+            setLoading(false);
+            setFamiliesInitialized(true);
+            return;
+          }
+        }
+        
+        console.log('New account detected, skipping family retry logic');
+        retryCount.current = maxRetries; // Prevent retries
+      }
+      
       // Try to refresh user session if forceRefresh is true (after failed attempt)
-      if (forceRefresh) {
+      // But skip if it's a recent registration
+      if (forceRefresh && !isRecentRegistration) {
         try {
           await refreshUserSession();
         } catch (refreshError) {
-          console.error('Could not refresh session before loading families:', refreshError);
-          
-          // If no refresh token and retry limit exceeded, force logout
-          if (refreshError.message?.includes('No refresh token') && retryCount.current >= maxRetries) {
-            console.log('No refresh token available after max retries, logging out...');
-            setFamiliesInitialized(true);
-            setLoading(false);
-            
-            // Force logout to break the loop
-            if (logout) {
-              await logout(false);
-            }
-            return;
-          }
-          // Continue anyway with current token
+          console.log('Could not refresh session before loading families, but continuing anyway');
+          // Just continue with current token, no need to report error
         }
       }
       
@@ -106,12 +158,15 @@ export const FamilyProvider = ({ children }) => {
       console.log('Loaded families:', userFamilies);
       
       // If no families but user is authenticated, might be a temporary issue
-      if (userFamilies.length === 0 && shouldRetry()) {
-        console.log('No families returned, will retry in a moment...');
-        
-        // Wait briefly before retrying
-        setTimeout(() => loadFamilies(true), 1500);
-        return;
+      if (userFamilies.length === 0) {
+        const shouldTryAgain = await shouldRetry();
+        if (shouldTryAgain && !isRecentRegistration) {
+          console.log('No families returned, will retry in a moment...');
+          
+          // Wait briefly before retrying
+          setTimeout(() => loadFamilies(true), 1500);
+          return;
+        }
       }
       
       // Reset retry count on success or if we're done retrying
@@ -124,6 +179,7 @@ export const FamilyProvider = ({ children }) => {
         setSelectedFamily(null);
         await SecureStore.deleteItemAsync('selected_family_id');
         setFamiliesInitialized(true);
+        setLoading(false);
         return;
       }
       
@@ -144,9 +200,25 @@ export const FamilyProvider = ({ children }) => {
     } catch (err) {
       console.error('Error loading families:', err);
       
+      // Check if this is a fresh registration
+      const registrationTime = await SecureStore.getItemAsync('registration_time');
+      const isRecentRegistration = registrationTime && 
+        (Date.now() - parseInt(registrationTime)) < 30000; // 30 seconds
+      
+      // For fresh registrations, don't treat this as an error
+      if (isRecentRegistration) {
+        console.log('Recent registration detected, expected to have no families yet');
+        setFamilies([]);
+        setError(null);
+        setFamiliesInitialized(true);
+        setLoading(false);
+        return;
+      }
+      
       // Handle authentication errors
       if (err.response?.status === 401 || err.response?.status === 403) {
-        if (shouldRetry()) {
+        const shouldTryAgain = await shouldRetry();
+        if (shouldTryAgain) {
           console.log('Auth error when loading families, will retry with refresh...');
           setTimeout(() => loadFamilies(true), 1500);
           return;
@@ -212,6 +284,21 @@ export const FamilyProvider = ({ children }) => {
     
     try {
       setLoading(true);
+      
+      // Check if this is a fresh registration
+      const registrationTime = await SecureStore.getItemAsync('registration_time');
+      const isRecentRegistration = registrationTime && 
+        (Date.now() - parseInt(registrationTime)) < 30000;
+      
+      // Skip token refresh for recent registrations
+      if (!isRecentRegistration) {
+        try {
+          await refreshUserSession();
+        } catch (error) {
+          console.log('Could not refresh session during family refresh, continuing anyway');
+        }
+      }
+      
       const userFamilies = await getUserFamilies();
       console.log('Refreshed families:', userFamilies);
       
@@ -236,6 +323,19 @@ export const FamilyProvider = ({ children }) => {
       }
     } catch (err) {
       console.error('Error refreshing families:', err);
+      
+      // Check if this is a fresh registration
+      const registrationTime = await SecureStore.getItemAsync('registration_time');
+      const isRecentRegistration = registrationTime && 
+        (Date.now() - parseInt(registrationTime)) < 30000;
+      
+      // For fresh registrations, don't treat this as an error
+      if (isRecentRegistration) {
+        console.log('Recent registration detected, expected to have no families yet');
+        setFamilies([]);
+        setError(null);
+        return;
+      }
       
       // Handle authentication errors
       if (err.response?.status === 401 || err.response?.status === 403) {
@@ -313,7 +413,19 @@ export const FamilyProvider = ({ children }) => {
   const forceRefreshFamilies = async () => {
     retryCount.current = 0;
     lastRetryTime.current = 0;
-    await loadFamilies(true);
+    
+    // Check if this is a fresh registration
+    const registrationTime = await SecureStore.getItemAsync('registration_time');
+    const isRecentRegistration = registrationTime && 
+      (Date.now() - parseInt(registrationTime)) < 30000;
+    
+    // For fresh registrations, we expect no families
+    if (isRecentRegistration) {
+      console.log('Recent registration detected in force refresh, not attempting token refresh');
+      await loadFamilies(false);
+    } else {
+      await loadFamilies(true);
+    }
   };
 
   return (

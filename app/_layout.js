@@ -1,4 +1,3 @@
-// app/_layout.js
 import React, { useEffect, useState } from 'react';
 import { Stack } from 'expo-router';
 import { AuthProvider, useAuth } from '../context/AuthContext';
@@ -10,6 +9,7 @@ import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 
 // Keep the splash screen visible while we check authentication
 SplashScreen.preventAutoHideAsync();
@@ -74,7 +74,7 @@ const LoadingScreen = ({ showRetry, onRetry }) => (
 
 // Navigation structure with authentication
 function RootLayoutNav() {
-  const { isAuthenticated, loading: authLoading, authInitialized, refreshUserSession } = useAuth();
+  const { isAuthenticated, loading: authLoading, authInitialized, refreshUserSession, user } = useAuth();
   const { familiesInitialized, loading: familyLoading, hasFamilies, retryLoadFamilies } = useFamily();
   const [showRetry, setShowRetry] = useState(false);
   
@@ -97,17 +97,38 @@ function RootLayoutNav() {
   // Show retry button if authenticated but families failed to load
   useEffect(() => {
     if (authInitialized && isAuthenticated && familiesInitialized && !hasFamilies && !familyLoading) {
-      // If we're authenticated but have no families, something might be wrong
-      // Give the user a chance to retry after a short delay
-      const timer = setTimeout(() => {
-        setShowRetry(true);
-      }, 3000);
+      // Check if we're in the family setup phase
+      const checkIfInFamilySetup = async () => {
+        // If no family_id, we're in setup phase - don't show retry
+        if (!user?.family_id) {
+          console.log('In family setup phase, not showing retry button');
+          setShowRetry(false);
+          return;
+        }
+        
+        const registrationTime = await SecureStore.getItemAsync('registration_time');
+        const isRecentRegistration = registrationTime && 
+          (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000; // 5 minutes
+        
+        if (isRecentRegistration && !user?.family_id) {
+          // New user in setup - don't show retry
+          console.log('New account in setup phase, not showing retry');
+          setShowRetry(false);
+        } else if (!isRecentRegistration) {
+          // Only show retry for established accounts
+          const timer = setTimeout(() => {
+            setShowRetry(true);
+          }, 3000);
+          
+          return () => clearTimeout(timer);
+        }
+      };
       
-      return () => clearTimeout(timer);
+      checkIfInFamilySetup();
     } else {
       setShowRetry(false);
     }
-  }, [authInitialized, isAuthenticated, familiesInitialized, hasFamilies, familyLoading]);
+  }, [authInitialized, isAuthenticated, familiesInitialized, hasFamilies, familyLoading, user]);
   
   const handleRetry = async () => {
     setShowRetry(false);
@@ -129,7 +150,8 @@ function RootLayoutNav() {
     authLoading,
     familiesInitialized,
     familyLoading,
-    showRetry
+    showRetry,
+    userHasFamily: !!user?.family_id
   });
   
   // Show a loading indicator if still initializing
@@ -153,14 +175,27 @@ function RootLayoutNav() {
         }}
       >
         {isAuthenticated ? (
-          // Only show tabs if authenticated
-          <Stack.Screen 
-            name="(tabs)" 
-            options={{
-              animation: 'fade',
-            }}
-          />
+          // Check if user needs family setup
+          user?.family_id ? (
+            // User is authenticated and has a family
+            <Stack.Screen 
+              name="(tabs)" 
+              options={{
+                animation: 'fade',
+              }}
+            />
+          ) : (
+            // User is authenticated but needs family setup
+            <Stack.Screen 
+              name="(family-setup)" 
+              options={{
+                animation: 'fade',
+                gestureEnabled: false
+              }}
+            />
+          )
         ) : (
+          // Not authenticated, show auth screens
           <Stack.Screen 
             name="(auth)"
             options={{

@@ -1,4 +1,3 @@
-// app/(auth)/register.js
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
 import { useRouter, Link } from 'expo-router';
@@ -67,9 +66,14 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     if (!validateInputs()) return;
 
+    // Register user without a passkey - family setup will be handled separately
     const result = await register(name, email, password);
+    
     if (result.success) {
-      router.replace('/(tabs)/feed');
+      console.log('Registration successful, main layout will handle redirection');
+      // No need for explicit redirect - main layout will handle it based on auth state
+    } else {
+      console.log('Registration failed:', result.message);
     }
   };
 
@@ -84,6 +88,7 @@ export default function RegisterScreen() {
         style={styles.scrollView}
         contentContainerStyle={styles.scrollViewContent}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
       >
         <View style={styles.logoContainer}>
           <Image 
@@ -157,6 +162,8 @@ export default function RegisterScreen() {
             />
             {confirmPasswordError ? <Text style={styles.errorText}>{confirmPasswordError}</Text> : null}
           </View>
+
+
 
           <TouchableOpacity 
             style={styles.buttonContainer} 
@@ -284,6 +291,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
+
   buttonContainer: {
     height: 54,
     borderRadius: 12,

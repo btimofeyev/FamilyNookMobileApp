@@ -263,11 +263,25 @@ export const AuthProvider = ({ children }) => {
     
     isRefreshing.current = true;
     try {
+      // Check if this is a new account (less than 5 minutes old)
+      const registrationTime = await SecureStore.getItemAsync('registration_time');
+      const isNewAccount = await SecureStore.getItemAsync('is_new_account');
+      
+      const isRecentRegistration = registrationTime && 
+        (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000; // 5 minutes
+      
+      // If it's a new account in setup phase, skip refresh entirely
+      if (isNewAccount === 'true' && isRecentRegistration) {
+        console.log('Skipping token refresh for new account in setup phase');
+        return true;
+      }
+      
       const refreshToken = await SecureStore.getItemAsync('refresh_token');
       
       if (!refreshToken) {
         throw new Error('No refresh token available');
       }
+  
       
       console.log('Attempting to refresh token with refresh token');
       const response = await axios.post(
@@ -385,15 +399,27 @@ export const AuthProvider = ({ children }) => {
       const payload = { name, email, password };
       if (passkey) payload.passkey = passkey;
       
+      console.log('Attempting registration with payload:', { ...payload, password: '****' });
+      
       const response = await axios.post(`${API_ENDPOINT}/api/auth/register`, payload);
       
-      const { token: authToken, user: userData, refreshToken } = response.data;
+      const { token: authToken, user: userData } = response.data;
+      console.log('Registration successful, storing tokens and user data');
+      
+      // Store registration timestamp to identify fresh registrations
+      const now = Date.now();
+      await SecureStore.setItemAsync('registration_time', now.toString());
+      await SecureStore.setItemAsync('is_new_account', 'true');
       
       // Store in secure storage
       await SecureStore.setItemAsync('auth_token', authToken);
-      if (refreshToken) {
-        await SecureStore.setItemAsync('refresh_token', refreshToken);
+      
+      // The server may not send a refresh token for new accounts
+      // We'll handle token refresh specially for new accounts
+      if (response.data.refreshToken) {
+        await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
       }
+      
       await SecureStore.setItemAsync('user', JSON.stringify(userData));
       
       // Update state
@@ -405,8 +431,17 @@ export const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
       lastAuthCheck.current = Date.now();
       
-      return { success: true, newUser: response.data.isNewUser };
+      // Important: If the user has a family_id, they're already in a family
+      // Otherwise, they need to go through family setup
+      const needsFamilySetup = !userData.family_id;
+      
+      return { 
+        success: true, 
+        needsFamilySetup: needsFamilySetup,
+        isNewUser: response.data.isNewUser || true
+      };
     } catch (e) {
+      console.error('Registration error:', e);
       const message = e.response?.data?.error || 'Registration failed. Please try again.';
       setError(message);
       return { success: false, message };

@@ -1,4 +1,3 @@
-// app/api/client.js
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { API_URL } from '@env';
@@ -82,11 +81,23 @@ apiClient.interceptors.response.use(
     
     // Handle 401/403 errors that need token refresh
     if ((error.response?.status === 401 || error.response?.status === 403) && 
-        !originalRequest._retry && 
-        !skipRetryUrls.some(url => requestUrl.includes(url))) {
-      
-      console.log(`Auth error (${error.response?.status}) detected, attempting refresh...`);
-      originalRequest._retry = true;
+    !originalRequest._retry && 
+    !skipRetryUrls.some(url => requestUrl.includes(url))) {
+  
+  console.log(`Auth error (${error.response?.status}) detected, checking if refresh is appropriate...`);
+  
+  // IMPORTANT: First check if this is a new account in setup phase
+  const registrationTime = await SecureStore.getItemAsync('registration_time');
+  const isRecentRegistration = registrationTime && 
+    (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000; // 5 minutes
+  
+  // If this is a recent registration, don't attempt refresh at all
+  if (isRecentRegistration) {
+    console.log('New account in setup phase detected, skipping token refresh');
+    return Promise.reject(error); // Just return the original error
+  }
+  
+  originalRequest._retry = true;
       
       try {
         // Only try to refresh if we haven't reached MAX_REFRESH_RETRIES
@@ -97,19 +108,32 @@ apiClient.interceptors.response.use(
           if (!refreshTokenPromise) {
             refreshTokenPromise = (async () => {
               try {
+                // Check if this is a fresh registration (within last 30 seconds)
+                const registrationTime = await SecureStore.getItemAsync('registration_time');
+                const isRecentRegistration = registrationTime && 
+                  (Date.now() - parseInt(registrationTime)) < 30000; // 30 seconds
+                
                 // Get refresh token
                 const refreshToken = await SecureStore.getItemAsync('refresh_token');
                 if (!refreshToken) {
-                  console.error('No refresh token available for refresh');
-                  // Even without a refresh token, don't mark as failed permanently
-                  // This allows other mechanisms to retry later
-                  
-                  // Just notify about this specific failure
-                  authEvents.emit({ 
-                    type: 'refresh_failed', 
-                    error: new Error('No refresh token available'),
-                    retryCount: refreshRetryCount
-                  });
+                  if (isRecentRegistration) {
+                    console.log('Fresh registration detected, skipping token refresh');
+                    // For new registrations, we'll handle this differently
+                    
+                    // Notify about missing refresh token but note it's a new registration
+                    authEvents.emit({ 
+                      type: 'new_registration',
+                      message: 'No refresh token available for new registration'
+                    });
+                  } else {
+                    console.error('No refresh token available for refresh');
+                    // Emit the refresh failed event for non-recent registrations
+                    authEvents.emit({ 
+                      type: 'refresh_failed', 
+                      error: new Error('No refresh token available'),
+                      retryCount: refreshRetryCount
+                    });
+                  }
                   throw new Error('No refresh token available');
                 }
                 
@@ -152,14 +176,24 @@ apiClient.interceptors.response.use(
                 
                 return token;
               } catch (error) {
-                console.error('Token refresh request failed:', error.message);
+                // Check if this is a fresh registration error
+                const registrationTime = await SecureStore.getItemAsync('registration_time');
+                const isRecentRegistration = registrationTime && 
+                  (Date.now() - parseInt(registrationTime)) < 30000; // 30 seconds
                 
-                // Notify listeners about failed token refresh, but include retry count
-                authEvents.emit({ 
-                  type: 'refresh_failed', 
-                  error,
-                  retryCount: refreshRetryCount
-                });
+                if (isRecentRegistration && error.message === 'No refresh token available') {
+                  // For fresh registrations, don't log this as an error
+                  console.log('Token refresh not available for new registration');
+                } else {
+                  console.error('Token refresh request failed:', error.message);
+                  
+                  // Notify listeners about failed token refresh, but include retry count
+                  authEvents.emit({ 
+                    type: 'refresh_failed', 
+                    error,
+                    retryCount: refreshRetryCount
+                  });
+                }
                 
                 throw error;
               } finally {
@@ -168,15 +202,32 @@ apiClient.interceptors.response.use(
             })();
           }
           
-          // Wait for the refresh token operation to complete
-          const newToken = await refreshTokenPromise;
-          
-          // Update the failed request with the new token
-          originalRequest.headers.Authorization = `Bearer ${newToken}`;
-          console.log('Retrying request with new token');
-          
-          // Retry the original request with the new token
-          return axios(originalRequest);
+          try {
+            // Wait for the refresh token operation to complete
+            const newToken = await refreshTokenPromise;
+            
+            // Update the failed request with the new token
+            originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            console.log('Retrying request with new token');
+            
+            // Retry the original request with the new token
+            return axios(originalRequest);
+          } catch (waitError) {
+            // Check if this is a fresh registration error
+            const registrationTime = await SecureStore.getItemAsync('registration_time');
+            const isRecentRegistration = registrationTime && 
+              (Date.now() - parseInt(registrationTime)) < 30000; // 30 seconds
+            
+            // If it's a fresh registration with no refresh token, we'll still proceed without refresh
+            if (isRecentRegistration && waitError.message === 'No refresh token available') {
+              // For requests right after registration, we'll let them continue with the existing token
+              console.log('Continuing with original token for new registration');
+              return Promise.reject(error);
+            }
+            
+            // Otherwise rethrow
+            throw waitError;
+          }
         } else {
           console.warn(`Max refresh retries (${MAX_REFRESH_RETRIES}) reached, notifying auth system`);
           // Notify about auth issues, but don't permanently mark as failed
