@@ -79,27 +79,38 @@ export const createPost = async (familyId, data) => {
     formData.append('familyId', familyId);
     
     if (data.media) {
+      // Check if we're dealing with a video file
+      const isVideo = data.media.isVideo || data.media.type?.startsWith('video/');
+      
       console.log('Adding media to post:', {
         uri: data.media.uri,
-        type: data.media.type || 'image/jpeg',
-        name: data.media.fileName || `photo-${Date.now()}.jpg`
+        type: data.media.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+        name: data.media.fileName || `${isVideo ? 'video' : 'photo'}-${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`
       });
       
       formData.append('media', {
         uri: data.media.uri,
-        name: data.media.fileName || `photo-${Date.now()}.jpg`,
-        type: data.media.type || 'image/jpeg'
+        // Ensure we have a proper type
+        type: data.media.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
+        // Ensure proper file name with extension
+        name: data.media.fileName || `${isVideo ? 'video' : 'photo'}-${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`
       });
+      
+      // Add the mediaType field to help the server identify what kind of media this is
+      formData.append('mediaType', isVideo ? 'video' : 'image');
     }
+    
+    console.log('Form data prepared:', formData);
     
     const response = await apiClient.post(`/api/family/${familyId}/posts`, formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
-      // Increase timeout for media upload
-      timeout: 60000 // 60 seconds
+      // Increase timeout for media upload - videos can take longer
+      timeout: 120000 // 2 minutes
     });
 
+    console.log('Post creation response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error creating post:', error);

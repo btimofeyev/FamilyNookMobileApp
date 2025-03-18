@@ -19,6 +19,7 @@ import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Video } from 'expo-av';
 import * as Haptics from 'expo-haptics';
+import * as FileSystem from 'expo-file-system';
 
 export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
   const [caption, setCaption] = useState('');
@@ -114,14 +115,35 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
           return;
         }
 
+        // Get file info to determine correct MIME type
+        const fileInfo = await FileSystem.getInfoAsync(result.assets[0].uri);
+        console.log("Video file info:", fileInfo);
+        
+        // Determine video mime type based on extension or default to mp4
+        let videoType = 'video/mp4';
+        const fileExt = result.assets[0].uri.split('.').pop().toLowerCase();
+        if (fileExt === 'mov') videoType = 'video/quicktime';
+        else if (fileExt === 'avi') videoType = 'video/x-msvideo';
+        else if (fileExt === 'wmv') videoType = 'video/x-ms-wmv';
+        
+        console.log(`Selected video with type: ${videoType}, extension: ${fileExt}`);
+
         setMedia({
           uri: result.assets[0].uri,
-          type: 'video/mp4', // Assuming MP4 format
-          fileName: result.assets[0].uri.split('/').pop(),
+          type: videoType,
+          fileName: `video_${Date.now()}.${fileExt || 'mp4'}`,
           isVideo: true
         });
         setShowMediaOptions(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        // Log details for debugging
+        console.log("Video selected:", {
+          uri: result.assets[0].uri,
+          type: videoType,
+          fileName: `video_${Date.now()}.${fileExt || 'mp4'}`,
+          size: fileInfo.size
+        });
       }
     } catch (error) {
       console.error('Error picking video:', error);
@@ -149,11 +171,15 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
       // Don't include any modifications for submission - let the backend handle it
       // The full URL is needed for proper link preview generation
 
-      await createPost(familyId, { 
+      console.log("Submitting post with media:", media);
+      
+      const result = await createPost(familyId, { 
         caption: finalCaption, 
         media,
         mediaType: media ? (media.isVideo ? 'video' : 'image') : null 
       });
+      
+      console.log("Post creation response:", result);
       
       onPostCreated();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);

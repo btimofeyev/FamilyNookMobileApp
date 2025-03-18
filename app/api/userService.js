@@ -35,26 +35,44 @@ export const updateUserProfile = async (userData) => {
 
 export const uploadProfilePhoto = async (imageFile) => {
   try {
+    console.log('Starting profile photo upload with file:', imageFile);
+    
+    // Create FormData exactly as you do in your working post upload function
     const formData = new FormData();
+    
+    // Add the image to formData - use the exact same field format as your working post upload
     formData.append('profilePhoto', {
       uri: imageFile.uri,
-      name: imageFile.fileName || `profile-${Date.now()}.jpg`,
-      type: imageFile.type || 'image/jpeg'
+      type: imageFile.type || 'image/jpeg',
+      name: imageFile.fileName || `profile-${Date.now()}.jpg`
     });
     
+    // Match the exact headers, timeout, and other parameters from your working post upload
     const response = await apiClient.post('/api/dashboard/profile/photo', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+      timeout: 60000 // Use the same timeout as your post upload
     });
     
+    console.log('Profile photo upload successful:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Error uploading profile photo:', error);
+    console.error('Error in uploadProfilePhoto:', error);
     throw error;
   }
 };
-
+export const joinFamilyByPasskey = async (passkey) => {
+  try {
+    console.log(`Validating and joining family with passkey: ${passkey}`);
+    const response = await apiClient.post('/api/dashboard/families/validate-passkey', { passkey });
+    console.log('Join family response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Error joining family with passkey:', error);
+    throw error;
+  }
+};
 export const inviteToFamily = async (familyId, email) => {
   try {
     const response = await apiClient.post('/api/invitations/invite', {
