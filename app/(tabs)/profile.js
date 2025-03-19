@@ -18,7 +18,9 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useFamily } from "../../context/FamilyContext";
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
+import { useNavigation } from '@react-navigation/native';
+import { router, Stack } from "expo-router";
+
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
@@ -79,9 +81,7 @@ const getAvatarProperties = (name) => {
 
 export default function ProfileScreen() {
   const { user, logout, updateUserInfo } = useAuth();
-
-  const { families, selectedFamily, refreshFamilies, switchFamily } =
-    useFamily();
+  const { families, selectedFamily, refreshFamilies, switchFamily } = useFamily();
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -97,6 +97,7 @@ export default function ProfileScreen() {
   const [showJoinFamilyModal, setShowJoinFamilyModal] = useState(false);
   const [joinPasskey, setJoinPasskey] = useState("");
   const [joiningFamily, setJoiningFamily] = useState(false);
+  
   // Load user profile and posts data
   useEffect(() => {
     if (user && selectedFamily) {
@@ -239,6 +240,7 @@ export default function ProfileScreen() {
       Alert.alert("Error", "An error occurred while selecting the image.");
     }
   };
+  
   const renderProfileImage = () => {
     const profileImageUrl = userProfile?.profile_image || user?.profile_image;
     const hasProfileImage =
@@ -279,6 +281,7 @@ export default function ProfileScreen() {
       </View>
     );
   };
+  
   const handleInviteMember = async () => {
     if (!inviteEmail.trim() || !selectedFamily) {
       Alert.alert("Error", "Please enter a valid email address.");
@@ -342,26 +345,41 @@ export default function ProfileScreen() {
     router.push("/create-family");
   };
 
-  const handleLogout = async () => {
+  const handleJoinFamily = async () => {
+    if (!joinPasskey.trim()) {
+      Alert.alert('Error', 'Please enter a valid passkey.');
+      return;
+    }
+    
     try {
-      Alert.alert("Log Out", "Are you sure you want to log out?", [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Log Out",
-          style: "destructive",
-          onPress: async () => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            await logout();
-            router.replace("/login");
-          },
-        },
-      ]);
+      setJoiningFamily(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      
+      const result = await joinFamilyByPasskey(joinPasskey);
+      
+      if (result.valid && result.familyId) {
+        // Refresh the family list
+        await refreshFamilies();
+        
+        // Show success message
+        Alert.alert(
+          'Success',
+          `You have joined the "${result.familyName}" family!`,
+          [{ text: 'OK', onPress: () => setShowJoinFamilyModal(false) }]
+        );
+        
+        setJoinPasskey('');
+      } else {
+        Alert.alert('Error', 'Invalid or expired passkey. Please try again.');
+      }
     } catch (error) {
-      console.error("Error logging out:", error);
-      Alert.alert("Error", "Failed to log out. Please try again.");
+      console.error('Error joining family:', error);
+      Alert.alert('Error', 'Failed to join family. Please try again.');
+    } finally {
+      setJoiningFamily(false);
     }
   };
-
+  
   const renderFamilyMemberGridItem = (item) => {
     const isCurrentUser = user && user.id === item.id;
 
@@ -468,40 +486,6 @@ export default function ProfileScreen() {
       </View>
     </Modal>
   );
-  const handleJoinFamily = async () => {
-    if (!joinPasskey.trim()) {
-      Alert.alert('Error', 'Please enter a valid passkey.');
-      return;
-    }
-    
-    try {
-      setJoiningFamily(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      
-      const result = await joinFamilyByPasskey(joinPasskey);
-      
-      if (result.valid && result.familyId) {
-        // Refresh the family list
-        await refreshFamilies();
-        
-        // Show success message
-        Alert.alert(
-          'Success',
-          `You have joined the "${result.familyName}" family!`,
-          [{ text: 'OK', onPress: () => setShowJoinFamilyModal(false) }]
-        );
-        
-        setJoinPasskey('');
-      } else {
-        Alert.alert('Error', 'Invalid or expired passkey. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error joining family:', error);
-      Alert.alert('Error', 'Failed to join family. Please try again.');
-    } finally {
-      setJoiningFamily(false);
-    }
-  };
   
   // Add the Join Family modal render function
   const renderJoinFamilyModal = () => (
@@ -554,6 +538,7 @@ export default function ProfileScreen() {
       </View>
     </Modal>
   );
+  
   // Render passkey modal
   const renderPasskeyModal = () => (
     <Modal
@@ -609,221 +594,240 @@ export default function ProfileScreen() {
   }
 
   return (
-    <ScrollView
-      style={styles.container}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={handleRefresh}
-          tintColor="#F0C142"
-        />
-      }
-    >
-      <View style={styles.header}>
-        {renderProfileImage()}
-        <Text style={styles.userName}>{user?.name || "User"}</Text>
-        <Text style={styles.userEmail}>{user?.email || "user@example.com"}</Text>
-      </View>
-      
-      {/* Family Members Section */}
-      {selectedFamily && familyMembers.length > 0 && (
-        <BlurView intensity={10} tint="dark" style={styles.familyMembersSection}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Family Members</Text>
-            <TouchableOpacity onPress={() => setShowInviteModal(true)}>
-              <Text style={styles.inviteButtonText}>+ Invite</Text>
-            </TouchableOpacity>
-          </View>
-  
-          <View style={styles.familyMembersGridContainer}>
-            <FlatList
-              key="grid-4-column"
-              data={familyMembers}
-              renderItem={({ item }) => renderFamilyMemberGridItem(item)}
-              keyExtractor={(item) => item.id.toString()}
-              numColumns={4}
-              contentContainerStyle={styles.gridContent}
-              columnWrapperStyle={styles.gridRow}
-              scrollEnabled={false}
-            />
-          </View>
-        </BlurView>
-      )}
-      {/* Family Selection Section */}
-      <BlurView intensity={20} tint="dark" style={styles.section}>
-        <View style={styles.sectionTitleRow}>
-          <Text style={styles.sectionTitle}>My Families</Text>
-          <TouchableOpacity onPress={handleCreateFamily}>
-            <Text style={styles.addButtonText}>+ Create New</Text>
-          </TouchableOpacity>
-        </View>
-
-        {families.length > 0 ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.familiesScrollView}
-          >
-            {families.map((family) => (
-              <TouchableOpacity
-                key={family.family_id}
-                style={[
-                  styles.familyCard,
-                  selectedFamily?.family_id === family.family_id &&
-                    styles.selectedFamilyCard,
-                ]}
-                onPress={() => switchFamily(family)}
-              >
-                <View style={styles.familyIconContainer}>
-                  <Ionicons name="people" size={24} color="#000000" />
-                </View>
-                <Text style={styles.familyCardName} numberOfLines={1}>
-                  {family.family_name}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </ScrollView>
-        ) : (
-          <View style={styles.emptyFamily}>
-            <Ionicons name="people-outline" size={48} color="#8E8E93" />
-            <Text style={styles.emptyFamilyText}>
-              You don't have any families yet
-            </Text>
-            <TouchableOpacity
-              style={styles.createFamilyButton}
-              onPress={handleCreateFamily}
-              activeOpacity={0.8}
+    <>
+      {/* Add Stack.Screen with settings icon in the header */}
+      <Stack.Screen 
+        options={{
+          headerRight: () => (
+            <TouchableOpacity 
+              onPress={() => router.push('/settings')}
+              style={{ padding: 8 }}
             >
-              <Text style={styles.createFamilyButtonText}>Create Family</Text>
+              <Ionicons name="settings-outline" size={24} color="#F5F5F7" />
+            </TouchableOpacity>
+          ),
+          title: 'Profile',
+          headerStyle: {
+            backgroundColor: '#1E2B2F',
+          },
+          headerTintColor: '#F5F5F7',
+          headerShadowVisible: false,
+          headerShown: true, // Make sure the header is shown
+        }}
+      />
+      
+      <ScrollView
+        style={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#F0C142"
+          />
+        }
+      >
+        <View style={styles.header}>
+          {renderProfileImage()}
+          <Text style={styles.userName}>{user?.name || "User"}</Text>
+          <Text style={styles.userEmail}>{user?.email || "user@example.com"}</Text>
+        </View>
+        
+        {/* Family Members Section */}
+        {selectedFamily && familyMembers.length > 0 && (
+          <BlurView intensity={10} tint="dark" style={styles.familyMembersSection}>
+            <View style={styles.sectionTitleRow}>
+              <Text style={styles.sectionTitle}>Family Members</Text>
+              <TouchableOpacity onPress={() => setShowInviteModal(true)}>
+                <Text style={styles.inviteButtonText}>+ Invite</Text>
+              </TouchableOpacity>
+            </View>
+    
+            <View style={styles.familyMembersGridContainer}>
+              <FlatList
+                key="grid-4-column"
+                data={familyMembers}
+                renderItem={({ item }) => renderFamilyMemberGridItem(item)}
+                keyExtractor={(item) => item.id.toString()}
+                numColumns={4}
+                contentContainerStyle={styles.gridContent}
+                columnWrapperStyle={styles.gridRow}
+                scrollEnabled={false}
+              />
+            </View>
+          </BlurView>
+        )}
+        
+        {/* Family Selection Section */}
+        <BlurView intensity={20} tint="dark" style={styles.section}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={styles.sectionTitle}>My Families</Text>
+            <TouchableOpacity onPress={handleCreateFamily}>
+              <Text style={styles.addButtonText}>+ Create New</Text>
             </TouchableOpacity>
           </View>
-        )}
-      </BlurView>
-      {/* Family Management Section */}
-      <BlurView intensity={20} tint="dark" style={styles.section}>
-      <Text style={styles.sectionTitle}>Family Management</Text>
 
-      <View style={styles.managementButtons}>
-        <TouchableOpacity 
-          style={styles.managementButton}
-          onPress={() => selectedFamily ? router.push(`/family/${selectedFamily.family_id}`) : null}
-          disabled={!selectedFamily}
-        >
-          <View style={[styles.iconCircle, !selectedFamily && styles.disabledIconCircle]}>
-            <Ionicons name="people" size={24} color="#FFFFFF" />
-          </View>
-          <Text style={[
-            styles.managementButtonText, 
-            !selectedFamily && styles.disabledText
-          ]}>
-            Family Details
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.managementButton}
-          onPress={() => setShowInviteModal(true)}
-          disabled={!selectedFamily}
-        >
-          <View style={[styles.iconCircle, !selectedFamily && styles.disabledIconCircle]}>
-            <Ionicons name="mail" size={22} color="#FFFFFF" />
-          </View>
-          <Text style={[
-            styles.managementButtonText, 
-            !selectedFamily && styles.disabledText
-          ]}>
-            Invite Member
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.managementButton}
-          onPress={handleGeneratePasskey}
-          disabled={!selectedFamily || generatingPasskey}
-        >
-          <View style={[
-            styles.iconCircle, 
-            (!selectedFamily || generatingPasskey) && styles.disabledIconCircle
-          ]}>
-            <Ionicons name="key" size={22} color="#FFFFFF" />
-          </View>
-          <Text style={[
-            styles.managementButtonText, 
-            (!selectedFamily || generatingPasskey) && styles.disabledText
-          ]}>
-            Generate Passkey
-          </Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.managementButton}
-          onPress={() => setShowJoinFamilyModal(true)}
-        >
-          <View style={styles.iconCircle}>
-            <Ionicons name="add-circle" size={22} color="#FFFFFF" />
-          </View>
-          <Text style={styles.managementButtonText}>
-            Join Family
-          </Text>
-        </TouchableOpacity>
-      </View>
-    </BlurView>
-      {/* Recent Posts Section */}
-      {selectedFamily && (
-        <BlurView intensity={20} tint="dark" style={styles.section}>
-          <Text style={styles.sectionTitle}>My Recent Posts</Text>
-
-          {userPosts && userPosts.length > 0 ? (
-            <>
-              {userPosts.slice(0, 3).map((post) => (
-                <PostItem
-                  key={post.post_id}
-                  post={post}
-                  isCurrentUser={true}
-                  onUpdate={() => loadUserData()}
-                  darkMode={true}
-                />
-              ))}
-
-              {userPosts.length > 3 && (
+          {families.length > 0 ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.familiesScrollView}
+            >
+              {families.map((family) => (
                 <TouchableOpacity
-                  style={styles.viewAllButton}
-                  onPress={() => router.push("/my-posts")}
+                  key={family.family_id}
+                  style={[
+                    styles.familyCard,
+                    selectedFamily?.family_id === family.family_id &&
+                      styles.selectedFamilyCard,
+                  ]}
+                  onPress={() => switchFamily(family)}
                 >
-                  <Text style={styles.viewAllButtonText}>View All Posts</Text>
+                  <View style={styles.familyIconContainer}>
+                    <Ionicons name="people" size={24} color="#000000" />
+                  </View>
+                  <Text style={styles.familyCardName} numberOfLines={1}>
+                    {family.family_name}
+                  </Text>
                 </TouchableOpacity>
-              )}
-            </>
+              ))}
+            </ScrollView>
           ) : (
-            <View style={styles.emptyPosts}>
-              <Ionicons name="images-outline" size={48} color="#8E8E93" />
-              <Text style={styles.emptyPostsText}>
-                You haven't created any posts yet
+            <View style={styles.emptyFamily}>
+              <Ionicons name="people-outline" size={48} color="#8E8E93" />
+              <Text style={styles.emptyFamilyText}>
+                You don't have any families yet
               </Text>
               <TouchableOpacity
-                style={styles.createPostButton}
-                onPress={() => router.push("/create-post")}
-                disabled={!selectedFamily}
+                style={styles.createFamilyButton}
+                onPress={handleCreateFamily}
                 activeOpacity={0.8}
               >
-                <Text style={styles.createPostButtonText}>Create Post</Text>
+                <Text style={styles.createFamilyButtonText}>Create Family</Text>
               </TouchableOpacity>
             </View>
           )}
         </BlurView>
-      )}
-      <TouchableOpacity
-        style={styles.logoutButton}
-        onPress={handleLogout}
-        activeOpacity={0.8}
-      >
-        <Ionicons name="log-out-outline" size={22} color="#FF453A" />
-        <Text style={styles.logoutText}>Log Out</Text>
-      </TouchableOpacity>
-      {renderInviteModal()}
-      {renderPasskeyModal()}
-      {renderJoinFamilyModal()}
-    </ScrollView>
+        
+        {/* Family Management Section */}
+        <BlurView intensity={20} tint="dark" style={styles.section}>
+          <Text style={styles.sectionTitle}>Family Management</Text>
+
+          <View style={styles.managementButtons}>
+            <TouchableOpacity 
+              style={styles.managementButton}
+              onPress={() => selectedFamily ? router.push(`/family/${selectedFamily.family_id}`) : null}
+              disabled={!selectedFamily}
+            >
+              <View style={[styles.iconCircle, !selectedFamily && styles.disabledIconCircle]}>
+                <Ionicons name="people" size={24} color="#FFFFFF" />
+              </View>
+              <Text style={[
+                styles.managementButtonText, 
+                !selectedFamily && styles.disabledText
+              ]}>
+                Family Details
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.managementButton}
+              onPress={() => setShowInviteModal(true)}
+              disabled={!selectedFamily}
+            >
+              <View style={[styles.iconCircle, !selectedFamily && styles.disabledIconCircle]}>
+                <Ionicons name="mail" size={22} color="#FFFFFF" />
+              </View>
+              <Text style={[
+                styles.managementButtonText, 
+                !selectedFamily && styles.disabledText
+              ]}>
+                Invite Member
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.managementButton}
+              onPress={handleGeneratePasskey}
+              disabled={!selectedFamily || generatingPasskey}
+            >
+              <View style={[
+                styles.iconCircle, 
+                (!selectedFamily || generatingPasskey) && styles.disabledIconCircle
+              ]}>
+                <Ionicons name="key" size={22} color="#FFFFFF" />
+              </View>
+              <Text style={[
+                styles.managementButtonText, 
+                (!selectedFamily || generatingPasskey) && styles.disabledText
+              ]}>
+                Generate Passkey
+              </Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.managementButton}
+              onPress={() => setShowJoinFamilyModal(true)}
+            >
+              <View style={styles.iconCircle}>
+                <Ionicons name="add-circle" size={22} color="#FFFFFF" />
+              </View>
+              <Text style={styles.managementButtonText}>
+                Join Family
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </BlurView>
+        
+        {/* Recent Posts Section */}
+        {selectedFamily && (
+          <BlurView intensity={20} tint="dark" style={styles.section}>
+            <Text style={styles.sectionTitle}>My Recent Posts</Text>
+
+            {userPosts && userPosts.length > 0 ? (
+              <>
+                {userPosts.slice(0, 3).map((post) => (
+                  <PostItem
+                    key={post.post_id}
+                    post={post}
+                    isCurrentUser={true}
+                    onUpdate={() => loadUserData()}
+                    darkMode={true}
+                  />
+                ))}
+
+                {userPosts.length > 3 && (
+                  <TouchableOpacity
+                    style={styles.viewAllButton}
+                    onPress={() => router.push("/my-posts")}
+                  >
+                    <Text style={styles.viewAllButtonText}>View All Posts</Text>
+                  </TouchableOpacity>
+                )}
+              </>
+            ) : (
+              <View style={styles.emptyPosts}>
+                <Ionicons name="images-outline" size={48} color="#8E8E93" />
+                <Text style={styles.emptyPostsText}>
+                  You haven't created any posts yet
+                </Text>
+                <TouchableOpacity
+                  style={styles.createPostButton}
+                  onPress={() => router.push("/create-post")}
+                  disabled={!selectedFamily}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.createPostButtonText}>Create Post</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </BlurView>
+        )}
+
+        {renderInviteModal()}
+        {renderPasskeyModal()}
+        {renderJoinFamilyModal()}
+      </ScrollView>
+    </>
   );
 }
 
@@ -1199,27 +1203,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
-  logoutButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(44, 44, 46, 0.8)",
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    marginHorizontal: 16,
-    marginTop: 8,
-    marginBottom: 40,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: "rgba(84, 84, 88, 0.5)",
-  },
-  logoutText: {
-    fontSize: 16,
-    color: "#FF453A", // iOS red color
-    fontWeight: "600",
-    marginLeft: 10,
-    fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
-  },
   modalOverlay: {
     flex: 1,
     justifyContent: "flex-end",
@@ -1329,5 +1312,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
-  },
+  }
 });
