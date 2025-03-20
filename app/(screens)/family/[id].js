@@ -1,10 +1,10 @@
 // app/(screens)/family/[id].js
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
   StyleSheet, 
-  TouchableOpacity, 
+  TouchableOpacity,
   ActivityIndicator,
   Alert,
   FlatList,
@@ -13,7 +13,8 @@ import {
   TextInput,
   Platform,
   ScrollView,
-  RefreshControl
+  RefreshControl,
+  SafeAreaView
 } from 'react-native';
 import { useLocalSearchParams, Stack, router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -21,6 +22,8 @@ import * as Haptics from 'expo-haptics';
 import * as Clipboard from 'expo-clipboard';
 import { useAuth } from '../../../context/AuthContext';
 import { useFamily } from '../../../context/FamilyContext';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   getFamilyDetails, 
   getFamilyMembers, 
@@ -49,6 +52,9 @@ export default function FamilyDetailScreen() {
   const [showPasskeyModal, setShowPasskeyModal] = useState(false);
   const [passkey, setPasskey] = useState('');
   const [generatingPasskey, setGeneratingPasskey] = useState(false);
+  
+  const [showLeaveConfirmModal, setShowLeaveConfirmModal] = useState(false);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     loadFamilyData();
@@ -136,52 +142,74 @@ export default function FamilyDetailScreen() {
     }
   };
   
-  const handleLeaveFamily = () => {
-    Alert.alert(
-      'Leave Family Group',
-      'Are you sure you want to leave this family group? You will no longer have access to shared content.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setLoading(true);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              
-              await leaveFamilyGroup(familyId);
-              
-              // Refresh families list
-              await refreshFamilies();
-              
-              // Navigate back to profile
-              router.replace('/profile');
-              
-              // Show success message
-              Alert.alert('Success', 'You have left the family group.');
-            } catch (error) {
-              console.error('Error leaving family:', error);
-              Alert.alert('Error', 'Failed to leave family group. Please try again.');
-            } finally {
-              setLoading(false);
-            }
-          }
-        }
-      ]
-    );
+  const handleLeaveFamily = async () => {
+    try {
+      setLeaving(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      
+      await leaveFamilyGroup(familyId);
+      
+      // Refresh families list
+      await refreshFamilies();
+      
+      setShowLeaveConfirmModal(false);
+      
+      // Navigate back to profile
+      router.replace('/profile');
+      
+      // Show success message
+      Alert.alert('Success', 'You have left the family group.');
+    } catch (error) {
+      console.error('Error leaving family:', error);
+      Alert.alert('Error', 'Failed to leave family group. Please try again.');
+    } finally {
+      setLeaving(false);
+    }
   };
   
   const renderMemberItem = ({ item }) => {
     const isCurrentUser = user && user.id === item.id;
     
+    // Generate avatar properties
+    const getAvatarColor = (name) => {
+      // Generate a consistent color based on name
+      const colors = [
+        "#FF453A", // Red
+        "#FF9F0A", // Orange
+        "#FFD60A", // Yellow
+        "#30D158", // Green
+        "#64D2FF", // Blue
+        "#5E5CE6", // Indigo
+        "#BF5AF2", // Purple
+        "#FF375F", // Pink
+      ];
+      
+      // Simple hash function for consistent color selection
+      let hash = 0;
+      for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      
+      return colors[Math.abs(hash) % colors.length];
+    };
+    
+    const hasProfileImage = item.profile_image && 
+                            item.profile_image !== "https://via.placeholder.com/150";
+    
+    const backgroundColor = getAvatarColor(item.name);
+    const firstLetter = item.name.charAt(0).toUpperCase();
+    
     return (
-      <View style={styles.memberItem}>
+      <BlurView intensity={20} tint="dark" style={styles.memberItem}>
         <View style={styles.memberInfoContainer}>
-          <View style={styles.memberAvatar}>
-            <Text style={styles.memberInitial}>
-              {item.name.charAt(0).toUpperCase()}
-            </Text>
+          <View style={styles.memberAvatarContainer}>
+            {hasProfileImage ? (
+              <Image source={{ uri: item.profile_image }} style={styles.memberAvatar} />
+            ) : (
+              <View style={[styles.memberAvatar, { backgroundColor }]}>
+                <Text style={styles.memberInitial}>{firstLetter}</Text>
+              </View>
+            )}
           </View>
           <View style={styles.memberDetails}>
             <Text style={styles.memberName}>
@@ -190,7 +218,7 @@ export default function FamilyDetailScreen() {
             <Text style={styles.memberEmail}>{item.email}</Text>
           </View>
         </View>
-      </View>
+      </BlurView>
     );
   };
   
@@ -203,7 +231,7 @@ export default function FamilyDetailScreen() {
       onRequestClose={() => setShowInviteModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <BlurView intensity={30} tint="dark" style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Invite Family Member</Text>
             <TouchableOpacity onPress={() => setShowInviteModal(false)}>
@@ -219,6 +247,7 @@ export default function FamilyDetailScreen() {
             <TextInput
               style={styles.input}
               placeholder="Email address"
+              placeholderTextColor="#8E8E93"
               value={inviteEmail}
               onChangeText={setInviteEmail}
               keyboardType="email-address"
@@ -230,14 +259,21 @@ export default function FamilyDetailScreen() {
               onPress={handleInviteMember}
               disabled={inviting || !inviteEmail.trim()}
             >
-              {inviting ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.actionButtonText}>Send Invitation</Text>
-              )}
+              <LinearGradient
+                colors={['#3BAFBC', '#1E2B2F']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.actionButtonGradient}
+              >
+                {inviting ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.actionButtonText}>Send Invitation</Text>
+                )}
+              </LinearGradient>
             </TouchableOpacity>
           </View>
-        </View>
+        </BlurView>
       </View>
     </Modal>
   );
@@ -251,7 +287,7 @@ export default function FamilyDetailScreen() {
       onRequestClose={() => setShowPasskeyModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
+        <BlurView intensity={30} tint="dark" style={styles.modalContent}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Family Passkey</Text>
             <TouchableOpacity onPress={() => setShowPasskeyModal(false)}>
@@ -276,61 +312,167 @@ export default function FamilyDetailScreen() {
               style={styles.actionButton}
               onPress={copyPasskeyToClipboard}
             >
-              <Text style={styles.actionButtonText}>Copy to Clipboard</Text>
+              <LinearGradient
+                colors={['#3BAFBC', '#1E2B2F']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={styles.actionButtonGradient}
+              >
+                <Text style={styles.actionButtonText}>Copy to Clipboard</Text>
+              </LinearGradient>
             </TouchableOpacity>
           </View>
-        </View>
+        </BlurView>
+      </View>
+    </Modal>
+  );
+  
+  // Render leave confirmation modal
+  const renderLeaveConfirmModal = () => (
+    <Modal
+      visible={showLeaveConfirmModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => setShowLeaveConfirmModal(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <BlurView intensity={30} tint="dark" style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>Leave Family Group</Text>
+            <TouchableOpacity onPress={() => setShowLeaveConfirmModal(false)}>
+              <Ionicons name="close" size={24} color="#8E8E93" />
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.modalBody}>
+            <View style={styles.warningIconContainer}>
+              <Ionicons name="warning-outline" size={48} color="#FF453A" />
+            </View>
+            
+            <Text style={styles.warningTitle}>Are you sure?</Text>
+            
+            <Text style={styles.warningText}>
+              If you leave this family group, you will no longer have access to:
+            </Text>
+            
+            <View style={styles.warningList}>
+              <Text style={styles.warningListItem}>• Family posts and comments</Text>
+              <Text style={styles.warningListItem}>• Shared memories and photos</Text>
+              <Text style={styles.warningListItem}>• Family calendar events</Text>
+            </View>
+            
+            <Text style={styles.warningText}>
+              This action cannot be undone. You'll need to be invited again to rejoin.
+            </Text>
+            
+            <View style={styles.actionButtonRow}>
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.cancelButton]}
+                onPress={() => setShowLeaveConfirmModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.dangerButton]}
+                onPress={handleLeaveFamily}
+                disabled={leaving}
+              >
+                {leaving ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.dangerButtonText}>Leave Family</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </BlurView>
       </View>
     </Modal>
   );
   
   if (loading && !family) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#4A90E2" />
-        <Text style={styles.loadingText}>Loading family information...</Text>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen 
+          options={{
+            title: 'Family Details',
+            headerStyle: {
+              backgroundColor: '#121212',
+            },
+            headerTintColor: '#F5F5F7',
+            headerShown: true,
+          }}
+        />
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3BAFBC" />
+          <Text style={styles.loadingText}>Loading family information...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
   
   if (error) {
     return (
-      <View style={styles.errorContainer}>
-        <Ionicons name="alert-circle-outline" size={48} color="#FF3B30" />
-        <Text style={styles.errorText}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
-          <Text style={styles.retryButtonText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
+      <SafeAreaView style={styles.container}>
+        <Stack.Screen 
+          options={{
+            title: 'Family Details',
+            headerStyle: {
+              backgroundColor: '#121212',
+            },
+            headerTintColor: '#F5F5F7',
+            headerShown: true,
+          }}
+        />
+        <View style={styles.errorContainer}>
+          <Ionicons name="alert-circle-outline" size={48} color="#FF453A" />
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity style={styles.retryButton} onPress={handleRefresh}>
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
   
   return (
-    <>
+    <SafeAreaView style={styles.container}>
       <Stack.Screen 
         options={{
           title: family?.family_name || 'Family Details',
+          headerStyle: {
+            backgroundColor: '#121212',
+          },
+          headerTintColor: '#F5F5F7',
           headerShown: true,
         }}
       />
       
       <ScrollView 
-        style={styles.container}
+        style={styles.scrollContainer}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} tintColor="#3BAFBC" />
         }
       >
         {/* Family Header */}
-        <View style={styles.familyHeader}>
-          <View style={styles.familyIcon}>
-            <Ionicons name="people" size={40} color="#FFFFFF" />
+        <BlurView intensity={20} tint="dark" style={styles.familyHeader}>
+          <View style={styles.familyIconContainer}>
+            <LinearGradient
+              colors={['#3BAFBC', '#1E2B2F']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.familyIcon}
+            >
+              <Ionicons name="people" size={40} color="#FFFFFF" />
+            </LinearGradient>
           </View>
           <Text style={styles.familyName}>{family?.family_name}</Text>
           <Text style={styles.memberCount}>{members.length} members</Text>
-        </View>
+        </BlurView>
         
         {/* Action Buttons */}
-        <View style={styles.actionButtonsContainer}>
+        <BlurView intensity={20} tint="dark" style={styles.actionButtonsContainer}>
           <TouchableOpacity 
             style={styles.actionButtonItem}
             onPress={() => setShowInviteModal(true)}
@@ -361,118 +503,140 @@ export default function FamilyDetailScreen() {
             </View>
             <Text style={styles.actionButtonLabel}>Calendar</Text>
           </TouchableOpacity>
-        </View>
+        </BlurView>
         
         {/* Members Section */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Family Members</Text>
+        <BlurView intensity={20} tint="dark" style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Family Members</Text>
+            <TouchableOpacity onPress={() => setShowInviteModal(true)}>
+              <Text style={styles.addButtonText}>+ Add</Text>
+            </TouchableOpacity>
+          </View>
           
           <FlatList
             data={members}
             renderItem={renderMemberItem}
             keyExtractor={(item) => item.id.toString()}
             scrollEnabled={false}
+            ItemSeparatorComponent={() => <View style={styles.separator} />}
             ListEmptyComponent={
               <Text style={styles.emptyText}>No members found.</Text>
             }
           />
-        </View>
+        </BlurView>
         
         {/* Leave Family Button */}
-        <TouchableOpacity 
-          style={styles.leaveButton}
-          onPress={handleLeaveFamily}
-        >
-          <Ionicons name="exit-outline" size={20} color="#FF3B30" />
-          <Text style={styles.leaveButtonText}>Leave Family Group</Text>
-        </TouchableOpacity>
+        <BlurView intensity={20} tint="dark" style={styles.leaveButtonContainer}>
+          <TouchableOpacity 
+            style={styles.leaveButton}
+            onPress={() => setShowLeaveConfirmModal(true)}
+          >
+            <Ionicons name="exit-outline" size={20} color="#FF453A" />
+            <Text style={styles.leaveButtonText}>Leave Family Group</Text>
+          </TouchableOpacity>
+        </BlurView>
         
         {renderInviteModal()}
         {renderPasskeyModal()}
+        {renderLeaveConfirmModal()}
       </ScrollView>
-    </>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F9F9F9',
+    backgroundColor: '#121212',
+  },
+  scrollContainer: {
+    flex: 1,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F9F9F9',
+    padding: 20,
   },
   loadingText: {
     marginTop: 12,
     fontSize: 16,
     color: '#8E8E93',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#F9F9F9',
   },
   errorText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#1C1C1E',
+    color: '#F5F5F7',
     textAlign: 'center',
     marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   retryButton: {
-    backgroundColor: '#4A90E2',
     paddingVertical: 10,
     paddingHorizontal: 20,
-    borderRadius: 20,
+    backgroundColor: '#3BAFBC',
+    borderRadius: 10,
   },
   retryButtonText: {
     color: '#FFFFFF',
     fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
+  
+  // Family Header
   familyHeader: {
-    backgroundColor: '#4A90E2',
     alignItems: 'center',
+    marginHorizontal: 16,
+    marginTop: 16,
     padding: 20,
-    paddingTop: 30,
-    paddingBottom: 30,
+    borderRadius: 16,
+    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback color
+  },
+  familyIconContainer: {
+    marginBottom: 15,
   },
   familyIcon: {
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: 'rgba(255, 255, 255, 0.3)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5,
   },
   familyName: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#FFFFFF',
+    color: '#F5F5F7',
     marginBottom: 5,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
   },
   memberCount: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
+    color: '#8E8E93',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
+  
+  // Action Buttons
   actionButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    padding: 15,
-    backgroundColor: '#FFFFFF',
-    borderRadius: 10,
-    marginTop: -20,
-    marginHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback color
   },
   actionButtonItem: {
     alignItems: 'center',
@@ -481,56 +645,70 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: '#4A90E2',
+    backgroundColor: '#3BAFBC',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 8,
   },
   actionButtonLabel: {
     fontSize: 14,
-    color: '#1C1C1E',
+    color: '#F5F5F7',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
+  
+  // Section
   section: {
-    padding: 20,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback color
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 15,
-    color: '#1C1C1E',
+    color: '#F5F5F7',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
   },
+  addButtonText: {
+    color: '#3BAFBC',
+    fontSize: 16,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  
+  // Member Items
   memberItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
+    backgroundColor: 'rgba(44, 44, 46, 0.6)', // Fallback color
   },
   memberInfoContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+  },
+  memberAvatarContainer: {
+    marginRight: 16,
   },
   memberAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#4A90E2',
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
   },
   memberInitial: {
     color: '#FFFFFF',
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
   },
   memberDetails: {
     flex: 1,
@@ -538,106 +716,199 @@ const styles = StyleSheet.create({
   memberName: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#1C1C1E',
-    marginBottom: 2,
+    color: '#F5F5F7',
+    marginBottom: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   memberEmail: {
     fontSize: 14,
     color: '#8E8E93',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-  leaveButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 15,
-    marginHorizontal: 20,
-    marginVertical: 20,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#FF3B30',
-  },
-  leaveButtonText: {
-    color: '#FF3B30',
-    fontWeight: '600',
-    fontSize: 16,
-    marginLeft: 8,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#E5E5E5',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#1C1C1E',
-  },
-  modalBody: {
-    padding: 20,
-  },
-  modalLabel: {
-    fontSize: 16,
-    color: '#1C1C1E',
-    marginBottom: 15,
-  },
-  input: {
-    backgroundColor: '#F2F2F7',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    marginBottom: 20,
-  },
-  actionButton: {
-    backgroundColor: '#4A90E2',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  passkeyContainer: {
-    backgroundColor: '#F2F2F7',
-    padding: 15,
-    borderRadius: 8,
-    marginBottom: 15,
-  },
-  passkey: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#4A90E2',
-    textAlign: 'center',
-    letterSpacing: 1,
-  },
-  passkeyInfo: {
-    fontSize: 14,
-    color: '#8E8E93',
-    marginBottom: 20,
-    textAlign: 'center',
+  separator: {
+    height: 1,
+    backgroundColor: 'rgba(60, 60, 67, 0.3)',
+    marginVertical: 8,
   },
   emptyText: {
     fontSize: 16,
     color: '#8E8E93',
     textAlign: 'center',
     padding: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
+  
+  // Leave Family Button
+  leaveButtonContainer: {
+    marginHorizontal: 16,
+    marginTop: 16,
+    marginBottom: 30,
+    padding: 4,
+    borderRadius: 16,
+    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback color
+  },
+  leaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FF453A',
+  },
+  leaveButtonText: {
+    color: '#FF453A',
+    fontWeight: '600',
+    fontSize: 16,
+    marginLeft: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  
+  // Modals
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    backgroundColor: 'rgba(18, 18, 18, 0.9)', // Fallback color
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(60, 60, 67, 0.3)',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#F5F5F7',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
+  modalBody: {
+    padding: 20,
+  },
+  modalLabel: {
+    fontSize: 16,
+    color: '#F5F5F7',
+    marginBottom: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  input: {
+    backgroundColor: 'rgba(58, 58, 60, 0.7)',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    marginBottom: 24,
+    color: '#F5F5F7',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  actionButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    marginVertical: 8,
+  },
+  actionButtonGradient: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  actionButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  passkeyContainer: {
+    backgroundColor: 'rgba(58, 58, 60, 0.7)',
+    padding: 20,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  passkey: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#3BAFBC',
+    textAlign: 'center',
+    letterSpacing: 1,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
+  passkeyInfo: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginBottom: 20,
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  
+  // Leave confirmation styles
+  warningIconContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  warningTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    color: '#F5F5F7',
+    textAlign: 'center',
+    marginBottom: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
+  warningText: {
+    fontSize: 16,
+    color: '#F5F5F7',
+    marginBottom: 12,
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  warningList: {
+    marginVertical: 16,
+    paddingHorizontal: 16,
+  },
+  warningListItem: {
+    fontSize: 15,
+    color: '#F5F5F7',
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  actionButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+  },
+  cancelButton: {
+    flex: 1,
+    marginRight: 8,
+    backgroundColor: 'rgba(58, 58, 60, 0.7)',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#F5F5F7',
+    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  dangerButton: {
+    flex: 1,
+    marginLeft: 8,
+    backgroundColor: '#FF453A',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  dangerButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  }
 });

@@ -18,7 +18,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import { useFamily } from "../../context/FamilyContext";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from "@react-navigation/native";
 import { router, Stack } from "expo-router";
 
 import * as ImagePicker from "expo-image-picker";
@@ -31,7 +31,7 @@ import {
   inviteToFamily,
   getFamilyMembers,
   uploadProfilePhoto,
-  joinFamilyByPasskey
+  joinFamilyByPasskey,
 } from "../api/userService";
 import { getFamilyPosts } from "../api/feedService";
 import { generateFamilyPasskey } from "../api/familyService";
@@ -81,7 +81,8 @@ const getAvatarProperties = (name) => {
 
 export default function ProfileScreen() {
   const { user, logout, updateUserInfo } = useAuth();
-  const { families, selectedFamily, refreshFamilies, switchFamily } = useFamily();
+  const { families, selectedFamily, refreshFamilies, switchFamily } =
+    useFamily();
 
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -97,7 +98,7 @@ export default function ProfileScreen() {
   const [showJoinFamilyModal, setShowJoinFamilyModal] = useState(false);
   const [joinPasskey, setJoinPasskey] = useState("");
   const [joiningFamily, setJoiningFamily] = useState(false);
-  
+
   // Load user profile and posts data
   useEffect(() => {
     if (user && selectedFamily) {
@@ -150,8 +151,8 @@ export default function ProfileScreen() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refreshFamilies(); 
-    await loadUserData(); 
+    await refreshFamilies();
+    await loadUserData();
     setRefreshing(false);
   };
 
@@ -240,7 +241,7 @@ export default function ProfileScreen() {
       Alert.alert("Error", "An error occurred while selecting the image.");
     }
   };
-  
+
   const renderProfileImage = () => {
     const profileImageUrl = userProfile?.profile_image || user?.profile_image;
     const hasProfileImage =
@@ -281,7 +282,7 @@ export default function ProfileScreen() {
       </View>
     );
   };
-  
+
   const handleInviteMember = async () => {
     if (!inviteEmail.trim() || !selectedFamily) {
       Alert.alert("Error", "Please enter a valid email address.");
@@ -347,39 +348,39 @@ export default function ProfileScreen() {
 
   const handleJoinFamily = async () => {
     if (!joinPasskey.trim()) {
-      Alert.alert('Error', 'Please enter a valid passkey.');
+      Alert.alert("Error", "Please enter a valid passkey.");
       return;
     }
-    
+
     try {
       setJoiningFamily(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      
+
       const result = await joinFamilyByPasskey(joinPasskey);
-      
+
       if (result.valid && result.familyId) {
         // Refresh the family list
         await refreshFamilies();
-        
+
         // Show success message
         Alert.alert(
-          'Success',
+          "Success",
           `You have joined the "${result.familyName}" family!`,
-          [{ text: 'OK', onPress: () => setShowJoinFamilyModal(false) }]
+          [{ text: "OK", onPress: () => setShowJoinFamilyModal(false) }]
         );
-        
-        setJoinPasskey('');
+
+        setJoinPasskey("");
       } else {
-        Alert.alert('Error', 'Invalid or expired passkey. Please try again.');
+        Alert.alert("Error", "Invalid or expired passkey. Please try again.");
       }
     } catch (error) {
-      console.error('Error joining family:', error);
-      Alert.alert('Error', 'Failed to join family. Please try again.');
+      console.error("Error joining family:", error);
+      Alert.alert("Error", "Failed to join family. Please try again.");
     } finally {
       setJoiningFamily(false);
     }
   };
-  
+
   const renderFamilyMemberGridItem = (item) => {
     const isCurrentUser = user && user.id === item.id;
 
@@ -486,7 +487,7 @@ export default function ProfileScreen() {
       </View>
     </Modal>
   );
-  
+
   // Add the Join Family modal render function
   const renderJoinFamilyModal = () => (
     <Modal
@@ -504,12 +505,12 @@ export default function ProfileScreen() {
                 <Ionicons name="close" size={24} color="#AEAEB2" />
               </TouchableOpacity>
             </View>
-            
+
             <View style={styles.modalBody}>
               <Text style={styles.modalLabel}>
                 Enter the family passkey you received from a family member:
               </Text>
-              
+
               <TextInput
                 style={styles.modalInput}
                 placeholder="Enter passkey"
@@ -519,8 +520,8 @@ export default function ProfileScreen() {
                 autoCapitalize="none"
                 selectionColor="#4CC2C4"
               />
-              
-              <TouchableOpacity 
+
+              <TouchableOpacity
                 style={styles.modalButton}
                 onPress={handleJoinFamily}
                 disabled={joiningFamily}
@@ -538,7 +539,7 @@ export default function ProfileScreen() {
       </View>
     </Modal>
   );
-  
+
   // Render passkey modal
   const renderPasskeyModal = () => (
     <Modal
@@ -596,26 +597,26 @@ export default function ProfileScreen() {
   return (
     <>
       {/* Add Stack.Screen with settings icon in the header */}
-      <Stack.Screen 
+      <Stack.Screen
         options={{
           headerRight: () => (
-            <TouchableOpacity 
-              onPress={() => router.push('/settings')}
+            <TouchableOpacity
+              onPress={() => router.push("/settings")}
               style={{ padding: 8 }}
             >
               <Ionicons name="settings-outline" size={24} color="#F5F5F7" />
             </TouchableOpacity>
           ),
-          title: 'Profile',
+          title: "Profile",
           headerStyle: {
-            backgroundColor: '#1E2B2F',
+            backgroundColor: "#1E2B2F",
           },
-          headerTintColor: '#F5F5F7',
+          headerTintColor: "#F5F5F7",
           headerShadowVisible: false,
           headerShown: true, // Make sure the header is shown
         }}
       />
-      
+
       <ScrollView
         style={styles.container}
         refreshControl={
@@ -629,19 +630,25 @@ export default function ProfileScreen() {
         <View style={styles.header}>
           {renderProfileImage()}
           <Text style={styles.userName}>{user?.name || "User"}</Text>
-          <Text style={styles.userEmail}>{user?.email || "user@example.com"}</Text>
+          <Text style={styles.userEmail}>
+            {user?.email || "user@example.com"}
+          </Text>
         </View>
-        
+
         {/* Family Members Section */}
         {selectedFamily && familyMembers.length > 0 && (
-          <BlurView intensity={10} tint="dark" style={styles.familyMembersSection}>
+          <BlurView
+            intensity={10}
+            tint="dark"
+            style={styles.familyMembersSection}
+          >
             <View style={styles.sectionTitleRow}>
               <Text style={styles.sectionTitle}>Family Members</Text>
               <TouchableOpacity onPress={() => setShowInviteModal(true)}>
                 <Text style={styles.inviteButtonText}>+ Invite</Text>
               </TouchableOpacity>
             </View>
-    
+
             <View style={styles.familyMembersGridContainer}>
               <FlatList
                 key="grid-4-column"
@@ -656,7 +663,7 @@ export default function ProfileScreen() {
             </View>
           </BlurView>
         )}
-        
+
         {/* Family Selection Section */}
         <BlurView intensity={20} tint="dark" style={styles.section}>
           <View style={styles.sectionTitleRow}>
@@ -707,77 +714,98 @@ export default function ProfileScreen() {
             </View>
           )}
         </BlurView>
-        
+
         {/* Family Management Section */}
         <BlurView intensity={20} tint="dark" style={styles.section}>
           <Text style={styles.sectionTitle}>Family Management</Text>
 
           <View style={styles.managementButtons}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.managementButton}
-              onPress={() => selectedFamily ? router.push(`/family/${selectedFamily.family_id}`) : null}
+              onPress={() =>
+                selectedFamily
+                  ? router.push(`/family/${selectedFamily.family_id}`)
+                  : null
+              }
               disabled={!selectedFamily}
             >
-              <View style={[styles.iconCircle, !selectedFamily && styles.disabledIconCircle]}>
+              <View
+                style={[
+                  styles.iconCircle,
+                  !selectedFamily && styles.disabledIconCircle,
+                ]}
+              >
                 <Ionicons name="people" size={24} color="#FFFFFF" />
               </View>
-              <Text style={[
-                styles.managementButtonText, 
-                !selectedFamily && styles.disabledText
-              ]}>
+              <Text
+                style={[
+                  styles.managementButtonText,
+                  !selectedFamily && styles.disabledText,
+                ]}
+              >
                 Family Details
               </Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.managementButton}
               onPress={() => setShowInviteModal(true)}
               disabled={!selectedFamily}
             >
-              <View style={[styles.iconCircle, !selectedFamily && styles.disabledIconCircle]}>
+              <View
+                style={[
+                  styles.iconCircle,
+                  !selectedFamily && styles.disabledIconCircle,
+                ]}
+              >
                 <Ionicons name="mail" size={22} color="#FFFFFF" />
               </View>
-              <Text style={[
-                styles.managementButtonText, 
-                !selectedFamily && styles.disabledText
-              ]}>
+              <Text
+                style={[
+                  styles.managementButtonText,
+                  !selectedFamily && styles.disabledText,
+                ]}
+              >
                 Invite Member
               </Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.managementButton}
               onPress={handleGeneratePasskey}
               disabled={!selectedFamily || generatingPasskey}
             >
-              <View style={[
-                styles.iconCircle, 
-                (!selectedFamily || generatingPasskey) && styles.disabledIconCircle
-              ]}>
+              <View
+                style={[
+                  styles.iconCircle,
+                  (!selectedFamily || generatingPasskey) &&
+                    styles.disabledIconCircle,
+                ]}
+              >
                 <Ionicons name="key" size={22} color="#FFFFFF" />
               </View>
-              <Text style={[
-                styles.managementButtonText, 
-                (!selectedFamily || generatingPasskey) && styles.disabledText
-              ]}>
+              <Text
+                style={[
+                  styles.managementButtonText,
+                  (!selectedFamily || generatingPasskey) && styles.disabledText,
+                ]}
+              >
                 Generate Passkey
               </Text>
             </TouchableOpacity>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={styles.managementButton}
               onPress={() => setShowJoinFamilyModal(true)}
             >
               <View style={styles.iconCircle}>
                 <Ionicons name="add-circle" size={22} color="#FFFFFF" />
               </View>
-              <Text style={styles.managementButtonText}>
-                Join Family
-              </Text>
+              <Text style={styles.managementButtonText}>Join Family</Text>
             </TouchableOpacity>
           </View>
         </BlurView>
-        
+
         {/* Recent Posts Section */}
         {selectedFamily && (
           <BlurView intensity={20} tint="dark" style={styles.section}>
@@ -1312,5 +1340,5 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
-  }
+  },
 });
