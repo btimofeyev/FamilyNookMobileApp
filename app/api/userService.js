@@ -1,5 +1,11 @@
 // app/api/userService.js
 import apiClient from './client';
+import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system';
+
+import { API_URL } from '@env';
+
+const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 export const getUserProfile = async (userId) => {
   try {
@@ -32,31 +38,80 @@ export const updateUserProfile = async (userData) => {
     throw error;
   }
 };
-
+// This is a simplified version for app/api/userService.js
 export const uploadProfilePhoto = async (imageFile) => {
   try {
     console.log('Starting profile photo upload with file:', imageFile);
     
-    // Create FormData exactly as you do in your working post upload function
-    const formData = new FormData();
+    // Step 1: Verify the file exists and get file info
+    try {
+      const fileInfo = await FileSystem.getInfoAsync(imageFile.uri);
+      console.log('File info:', fileInfo);
+      
+      if (!fileInfo.exists) {
+        throw new Error('File does not exist at the specified URI');
+      }
+    } catch (fileError) {
+      console.error('Error checking file:', fileError);
+      // Continue anyway, as the URI might still be valid
+    }
     
-    // Add the image to formData - use the exact same field format as your working post upload
-    formData.append('profilePhoto', {
+    // Step 2: Determine file type and name
+    let fileType = imageFile.type || 'image/jpeg';
+    const fileName = imageFile.fileName || `profile-${Date.now()}.${fileType.split('/')[1]}`;
+    
+    console.log('File details:', {
       uri: imageFile.uri,
-      type: imageFile.type || 'image/jpeg',
-      name: imageFile.fileName || `profile-${Date.now()}.jpg`
+      type: fileType,
+      name: fileName
     });
+
+    // Step 3: Get token and base URL
+    const token = await SecureStore.getItemAsync('auth_token');
+    if (!token) {
+      throw new Error('No authentication token found');
+    }
     
-    // Match the exact headers, timeout, and other parameters from your working post upload
-    const response = await apiClient.post('/api/dashboard/profile/photo', formData, {
+    // Get the base URL 
+    const baseUrl = API_URL || 'https://famlynook.com';
+    console.log('Using configured API URL:', baseUrl);
+    
+    // Step 4: Read file as base64
+    console.log('Reading file as base64...');
+    const base64Data = await FileSystem.readAsStringAsync(imageFile.uri, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+    console.log('File read successfully, length:', base64Data.length);
+    
+    // Step 5: Upload using Base64 JSON approach
+    console.log('Attempting upload with Base64 JSON...');
+    const response = await fetch(`${baseUrl}/api/dashboard/profile/photo/base64`, {
+      method: 'POST',
       headers: {
-        'Content-Type': 'multipart/form-data',
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
-      timeout: 60000 // Use the same timeout as your post upload
+      body: JSON.stringify({
+        image: base64Data,
+        fileName: fileName,
+        contentType: fileType
+      })
     });
     
-    console.log('Profile photo upload successful:', response.data);
-    return response.data;
+    console.log('Base64 upload response:', {
+      status: response.status,
+      ok: response.ok
+    });
+    
+    if (response.ok) {
+      const responseData = await response.json();
+      console.log('Upload response:', responseData);
+      return responseData;
+    } else {
+      const errorText = await response.text();
+      console.error('Server error response (base64):', errorText);
+      throw new Error(`Server error (base64): ${response.status} - ${errorText}`);
+    }
   } catch (error) {
     console.error('Error in uploadProfilePhoto:', error);
     throw error;

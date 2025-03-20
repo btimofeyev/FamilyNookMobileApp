@@ -158,12 +158,11 @@ export default function ProfileScreen() {
 
   const handlePickImage = async () => {
     Haptics.selectionAsync();
-
+  
     try {
       // Request permission
-      const { status } =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+  
       if (status !== "granted") {
         Alert.alert(
           "Permission Needed",
@@ -171,7 +170,7 @@ export default function ProfileScreen() {
         );
         return;
       }
-
+  
       // Launch image picker with reduced quality to ensure smaller file size
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -179,10 +178,10 @@ export default function ProfileScreen() {
         aspect: [1, 1],
         quality: 0.5, // Reduced quality for smaller file size
       });
-
+  
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setLoading(true);
-
+  
         try {
           // Get the selected image
           const selectedImage = result.assets[0];
@@ -190,41 +189,41 @@ export default function ProfileScreen() {
             uri: selectedImage.uri,
             width: selectedImage.width,
             height: selectedImage.height,
-            type: selectedImage.type || "unknown",
-          });
-
-          // Use your existing uploadProfilePhoto function instead of direct fetch
-          const response = await uploadProfilePhoto({
-            uri: selectedImage.uri,
             type: selectedImage.type || "image/jpeg",
-            fileName: `profile-${Date.now()}.${
-              selectedImage.uri.split(".").pop() || "jpg"
-            }`,
           });
-
-          console.log("Upload response:", response);
-
+          
+          // Prepare file data with correct extension
+          const uriParts = selectedImage.uri.split('.');
+          const fileExtension = uriParts[uriParts.length - 1];
+          
+          const imageData = {
+            uri: selectedImage.uri,
+            type: selectedImage.type || `image/${fileExtension}`,
+            fileName: `profile-${Date.now()}.${fileExtension}`
+          };
+          
+          // Upload profile photo
+          const response = await uploadProfilePhoto(imageData);
+  
           if (response && response.profileImageUrl) {
             // Update user state with the new profile image URL
             const updatedUser = {
               ...user,
               profile_image: response.profileImageUrl,
             };
-
+  
             // Update user in AuthContext
             await updateUserInfo(updatedUser);
-
+  
             // Update local state
             setUserProfile({
               ...userProfile,
               profile_image: response.profileImageUrl,
             });
-
+  
             Alert.alert("Success", "Profile photo updated successfully!");
           } else {
-            throw new Error(
-              "Invalid server response - missing profile image URL"
-            );
+            throw new Error("Invalid server response");
           }
         } catch (error) {
           console.error("Error uploading profile photo:", error);
@@ -241,7 +240,6 @@ export default function ProfileScreen() {
       Alert.alert("Error", "An error occurred while selecting the image.");
     }
   };
-
   const renderProfileImage = () => {
     const profileImageUrl = userProfile?.profile_image || user?.profile_image;
     const hasProfileImage =
