@@ -1,5 +1,5 @@
 // app/(tabs)/profile.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
   Text,
@@ -14,17 +14,15 @@ import {
   Image,
   Platform,
   FlatList,
+  Animated,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { useFamily } from "../../context/FamilyContext";
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
 import { router, Stack } from "expo-router";
-
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
-// Add this import at the top of your file
 import * as SecureStore from "expo-secure-store";
 import {
   getUserProfile,
@@ -37,6 +35,7 @@ import { getFamilyPosts } from "../api/feedService";
 import { generateFamilyPasskey } from "../api/familyService";
 import { BlurView } from "expo-blur";
 import PostItem from "../components/PostItem";
+import MemberAvatar from "../components/MemberAvatar"; // We'll create this component
 
 // Function to get a random color from the app's color palette
 const getRandomColor = () => {
@@ -44,10 +43,10 @@ const getRandomColor = () => {
   const colors = [
     "#FF4F5E", // Red
     "#FF7C1E", // Orange
-    "#FBC02D", // Yellow
-    "#0FCC45", // Green
-    "#00C2FF", // Cyan
-    "#5371E9", // Blue
+    "#FFD60A", // Yellow
+    "#30D158", // Green
+    "#64D2FF", // Blue
+    "#5371E9", // Indigo
     "#AA58CB", // Purple
     "#FF5995", // Pink
     "#49C7B8", // Teal
@@ -98,6 +97,9 @@ export default function ProfileScreen() {
   const [showJoinFamilyModal, setShowJoinFamilyModal] = useState(false);
   const [joinPasskey, setJoinPasskey] = useState("");
   const [joiningFamily, setJoiningFamily] = useState(false);
+  
+  // Add state for the animated scroll position
+  const scrollX = useRef(new Animated.Value(0)).current;
 
   // Load user profile and posts data
   useEffect(() => {
@@ -158,11 +160,12 @@ export default function ProfileScreen() {
 
   const handlePickImage = async () => {
     Haptics.selectionAsync();
-  
+
     try {
       // Request permission
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-  
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
       if (status !== "granted") {
         Alert.alert(
           "Permission Needed",
@@ -170,7 +173,7 @@ export default function ProfileScreen() {
         );
         return;
       }
-  
+
       // Launch image picker with reduced quality to ensure smaller file size
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -178,10 +181,10 @@ export default function ProfileScreen() {
         aspect: [1, 1],
         quality: 0.5, // Reduced quality for smaller file size
       });
-  
+
       if (!result.canceled && result.assets && result.assets.length > 0) {
         setLoading(true);
-  
+
         try {
           // Get the selected image
           const selectedImage = result.assets[0];
@@ -189,41 +192,41 @@ export default function ProfileScreen() {
             uri: selectedImage.uri,
             width: selectedImage.width,
             height: selectedImage.height,
-            type: selectedImage.type || "image/jpeg",
+            type: selectedImage.type || "unknown",
           });
-          
-          // Prepare file data with correct extension
-          const uriParts = selectedImage.uri.split('.');
-          const fileExtension = uriParts[uriParts.length - 1];
-          
-          const imageData = {
+
+          // Use your existing uploadProfilePhoto function instead of direct fetch
+          const response = await uploadProfilePhoto({
             uri: selectedImage.uri,
-            type: selectedImage.type || `image/${fileExtension}`,
-            fileName: `profile-${Date.now()}.${fileExtension}`
-          };
-          
-          // Upload profile photo
-          const response = await uploadProfilePhoto(imageData);
-  
+            type: selectedImage.type || "image/jpeg",
+            fileName: `profile-${Date.now()}.${
+              selectedImage.uri.split(".").pop() || "jpg"
+            }`,
+          });
+
+          console.log("Upload response:", response);
+
           if (response && response.profileImageUrl) {
             // Update user state with the new profile image URL
             const updatedUser = {
               ...user,
               profile_image: response.profileImageUrl,
             };
-  
+
             // Update user in AuthContext
             await updateUserInfo(updatedUser);
-  
+
             // Update local state
             setUserProfile({
               ...userProfile,
               profile_image: response.profileImageUrl,
             });
-  
+
             Alert.alert("Success", "Profile photo updated successfully!");
           } else {
-            throw new Error("Invalid server response");
+            throw new Error(
+              "Invalid server response - missing profile image URL"
+            );
           }
         } catch (error) {
           console.error("Error uploading profile photo:", error);
@@ -240,6 +243,7 @@ export default function ProfileScreen() {
       Alert.alert("Error", "An error occurred while selecting the image.");
     }
   };
+
   const renderProfileImage = () => {
     const profileImageUrl = userProfile?.profile_image || user?.profile_image;
     const hasProfileImage =
@@ -379,46 +383,63 @@ export default function ProfileScreen() {
     }
   };
 
-  const renderFamilyMemberGridItem = (item) => {
-    const isCurrentUser = user && user.id === item.id;
-
-    // Get color and letter unless user has a profile image
-    const { backgroundColor, letter } = getAvatarProperties(item.name);
-    const hasProfileImage =
-      item.profile_image &&
-      item.profile_image !== "https://via.placeholder.com/150";
-
+  // Render animated family members carousel
+  const renderFamilyMemberCarousel = () => {
+    const ITEM_SIZE = 80; // Size of each member avatar including spacing
+    
     return (
-      <View style={styles.memberGridItem}>
-        <TouchableOpacity
-          style={styles.memberCircle}
-          onPress={() => console.log(`Pressed on ${item.name}`)}
-          activeOpacity={0.7}
-        >
-          <View
-            style={[
-              styles.memberAvatar,
-              {
-                backgroundColor: hasProfileImage
-                  ? "transparent"
-                  : backgroundColor,
-              },
-            ]}
-          >
-            {hasProfileImage ? (
-              <Image
-                source={{ uri: item.profile_image }}
-                style={styles.memberProfileImage}
-              />
-            ) : (
-              <Text style={styles.memberLetter}>{letter}</Text>
-            )}
-          </View>
-        </TouchableOpacity>
-        <Text style={styles.memberName} numberOfLines={1}>
-          {item.name.split(" ")[0]}
-          {isCurrentUser ? " (You)" : ""}
-        </Text>
+      <View style={styles.familyMembersCarouselContainer}>
+        <Animated.FlatList
+          data={familyMembers}
+          keyExtractor={(item) => item.id.toString()}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.carouselContent}
+          snapToInterval={ITEM_SIZE}
+          decelerationRate="fast"
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            { useNativeDriver: true }
+          )}
+          renderItem={({ item, index }) => {
+            const isCurrentUser = user && user.id === item.id;
+            
+            // Create animation for the active item
+            const inputRange = [
+              (index - 1) * ITEM_SIZE,
+              index * ITEM_SIZE,
+              (index + 1) * ITEM_SIZE,
+            ];
+            
+            const scale = scrollX.interpolate({
+              inputRange,
+              outputRange: [0.8, 1, 0.8],
+              extrapolate: 'clamp',
+            });
+            
+            const opacity = scrollX.interpolate({
+              inputRange,
+              outputRange: [0.6, 1, 0.6],
+              extrapolate: 'clamp',
+            });
+            
+            return (
+              <Animated.View
+                style={[
+                  styles.memberCarouselItem,
+                  { transform: [{ scale }], opacity }
+                ]}
+              >
+                <MemberAvatar 
+                  member={item}
+                  size={60}
+                  showName={true}
+                  isCurrentUser={isCurrentUser}
+                />
+              </Animated.View>
+            );
+          }}
+        />
       </View>
     );
   };
@@ -633,7 +654,7 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        {/* Family Members Section */}
+        {/* Family Members Section with Animated Carousel */}
         {selectedFamily && familyMembers.length > 0 && (
           <BlurView
             intensity={10}
@@ -647,18 +668,8 @@ export default function ProfileScreen() {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.familyMembersGridContainer}>
-              <FlatList
-                key="grid-4-column"
-                data={familyMembers}
-                renderItem={({ item }) => renderFamilyMemberGridItem(item)}
-                keyExtractor={(item) => item.id.toString()}
-                numColumns={4}
-                contentContainerStyle={styles.gridContent}
-                columnWrapperStyle={styles.gridRow}
-                scrollEnabled={false}
-              />
-            </View>
+            {/* Render animated carousel instead of grid */}
+            {renderFamilyMemberCarousel()}
           </BlurView>
         )}
 
@@ -931,7 +942,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
 
-  // Family Members Grid Style
+  // Family Members Carousel Style
   familyMembersSection: {
     backgroundColor: "rgba(18, 18, 18, 0.9)",
     marginBottom: 16,
@@ -940,100 +951,18 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     padding: 14,
   },
-  familyMembersGridContainer: {
-    width: "100%",
-    paddingVertical: 4,
+  familyMembersCarouselContainer: {
+    height: 120, // Fixed height for the carousel
+    marginVertical: 12,
   },
-  gridContent: {
-    alignItems: "flex-start",
-  },
-  gridRow: {
-    justifyContent: "space-between",
-    width: "100%",
-    paddingHorizontal: 2,
-  },
-  memberGridItem: {
-    width: "24%",
+  carouselContent: {
     alignItems: "center",
-    marginBottom: 10,
+    paddingHorizontal: 6,
   },
-  memberCircle: {
+  memberCarouselItem: {
+    width: 80,
     alignItems: "center",
     justifyContent: "center",
-    width: 44,
-    height: 44,
-  },
-  memberAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 3,
-    overflow: "hidden",
-  },
-  memberProfileImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  memberLetter: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
-  },
-  memberName: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.8)",
-    textAlign: "center",
-    fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
-    marginTop: 4,
-    width: "100%",
-  },
-  memberCircle: {
-    alignItems: "center",
-    justifyContent: "center",
-    width: 44,
-    height: 44,
-  },
-  memberAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.3,
-    shadowRadius: 2,
-    elevation: 3,
-    overflow: "hidden",
-  },
-  memberProfileImage: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-  },
-  memberLetter: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
-  },
-  memberName: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "rgba(255, 255, 255, 0.8)",
-    textAlign: "center",
-    fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
-    marginTop: 6,
-    width: 60, // Fixed width for name to prevent layout shift
   },
   sectionTitleRow: {
     flexDirection: "row",
