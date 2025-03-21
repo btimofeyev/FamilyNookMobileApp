@@ -27,7 +27,7 @@ const { width } = Dimensions.get('window');
 
 export default function PostItem({ post, onUpdate, isCurrentUser }) {
   const [liked, setLiked] = useState(post.is_liked || false);
-  const [likesCount, setLikesCount] = useState(post.likes_count || 0);
+  const [likesCount, setLikesCount] = useState(parseInt(post.likes_count || 0, 10));
   const [showComments, setShowComments] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
@@ -38,6 +38,21 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
   const [isYoutubePlayerReady, setIsYoutubePlayerReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [processedCaption, setProcessedCaption] = useState(post.caption || '');
+  
+  // Refs for touch handling
+  const touchStartTimeRef = useRef(null);
+  const touchMoveDetectedRef = useRef(false);
+  const lastTouchPositionRef = useRef({ x: 0, y: 0 });
+  const isPerformingActionRef = useRef(false);
+  
+  // Update state when post prop changes
+  useEffect(() => {
+    // Make sure we handle boolean or string 'true'
+    const isLikedValue = post.is_liked === true || post.is_liked === 'true';
+    console.log(`PostItem update effect for post ${post.post_id}: is_liked=${isLikedValue}, likes_count=${post.likes_count}`);
+    setLiked(isLikedValue);
+    setLikesCount(parseInt(post.likes_count || 0, 10));
+  }, [post, post.is_liked, post.likes_count]);
 
   // Process caption and extract YouTube links if needed
   useEffect(() => {
@@ -89,13 +104,69 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
     return match ? match[0] : null;
   };
 
+  // Track touch start for the like button
+  const handleTouchStart = (event) => {
+    touchStartTimeRef.current = Date.now();
+    touchMoveDetectedRef.current = false;
+    
+    // Store initial touch position
+    lastTouchPositionRef.current = {
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY
+    };
+  };
+  
+  // Detect if user is moving/scrolling
+  const handleTouchMove = (event) => {
+    if (isPerformingActionRef.current) return;
+    
+    const currentPosition = {
+      x: event.nativeEvent.pageX,
+      y: event.nativeEvent.pageY
+    };
+    
+    // Calculate distance moved
+    const dx = Math.abs(currentPosition.x - lastTouchPositionRef.current.x);
+    const dy = Math.abs(currentPosition.y - lastTouchPositionRef.current.y);
+    
+    // If moved more than threshold, mark as scrolling
+    if (dx > 5 || dy > 5) {
+      touchMoveDetectedRef.current = true;
+    }
+  };
+  
+  // Only register like if it was a deliberate tap, not scrolling
+  const handleTouchEnd = useCallback((event) => {
+    if (isPerformingActionRef.current) return;
+    
+    const touchEndTime = Date.now();
+    const touchDuration = touchEndTime - (touchStartTimeRef.current || 0);
+    
+    // If touch was a tap (less than 300ms) and no movement was detected
+    if (touchDuration < 300 && !touchMoveDetectedRef.current) {
+      handleLike();
+    }
+    
+    // Reset refs
+    touchStartTimeRef.current = null;
+    touchMoveDetectedRef.current = false;
+  }, [handleLike]);
+
   const handleLike = async () => {
+    if (isLoading || isPerformingActionRef.current) return;
+    
+    isPerformingActionRef.current = true;
     setIsLoading(true);
+    
     try {
-      // Optimistic UI update
+      // Optimistic UI update with proper integer conversion
       const newLikedState = !liked;
       setLiked(newLikedState);
-      setLikesCount(prevCount => newLikedState ? prevCount + 1 : prevCount - 1);
+      
+      // Ensure likesCount is treated as a number for arithmetic operations
+      const currentCount = parseInt(likesCount, 10) || 0;
+      const newCount = newLikedState ? currentCount + 1 : Math.max(0, currentCount - 1);
+      setLikesCount(newCount);
       
       // Haptic feedback
       if (newLikedState) {
@@ -103,19 +174,47 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
         animateHeart();
       }
       
+      console.log(`Making like API call for post ${post.post_id}, expecting like state to be ${newLikedState}`);
+      
       // Make API call
       const result = await toggleLike(post.post_id);
       
       // Update with server response
-      setLiked(result.action === 'liked');
-      setLikesCount(result.likes_count);
+      const serverLiked = result.action === 'liked';
+      const serverCount = parseInt(result.likes_count, 10) || 0;
+      
+      console.log(`Server response for post ${post.post_id}: liked=${serverLiked}, count=${serverCount}`);
+      
+      // Only update if different from our optimistic update
+      if (serverLiked !== newLikedState) {
+        console.log(`Correcting like state mismatch for post ${post.post_id}: client=${newLikedState}, server=${serverLiked}`);
+        setLiked(serverLiked);
+      }
+      
+      if (serverCount !== newCount) {
+        console.log(`Correcting like count mismatch for post ${post.post_id}: client=${newCount}, server=${serverCount}`);
+        setLikesCount(serverCount);
+      }
+      
+      // Notify parent component about the update
+      if (onUpdate) {
+        onUpdate({
+          is_liked: serverLiked,
+          likes_count: serverCount
+        });
+      }
     } catch (error) {
       console.error('Error liking post:', error);
       // Revert on error
       setLiked(post.is_liked || false);
-      setLikesCount(post.likes_count || 0);
+      setLikesCount(parseInt(post.likes_count || 0, 10));
     } finally {
       setIsLoading(false);
+      
+      // Add a small delay before allowing another action
+      setTimeout(() => {
+        isPerformingActionRef.current = false;
+      }, 300);
     }
   };
 
@@ -389,6 +488,15 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
     );
   };
 
+  // Check and log if like state was received properly
+  useEffect(() => {
+    console.log(`PostItem mounted: ID=${post.post_id}, is_liked=${post.is_liked}, likes_count=${post.likes_count}`);
+    
+    return () => {
+      console.log(`PostItem unmounting: ID=${post.post_id}, final state: liked=${liked}, count=${likesCount}`);
+    };
+  }, []);
+  
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -417,10 +525,16 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
       
       <View style={styles.actions}>
         <TouchableOpacity 
-          onPress={handleLike} 
-          style={styles.actionButton}
-          disabled={isLoading}
+          onPressIn={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onPressOut={handleTouchEnd}
+          disabled={isLoading || isPerformingActionRef.current}
+          style={[
+            styles.actionButton,
+            styles.likeButtonContainer
+          ]}
           activeOpacity={0.7}
+          hitSlop={{ top: 10, right: 10, bottom: 10, left: 0 }}
         >
           <Animated.View style={{ transform: [{ scale: liked ? heartScale : 1 }] }}>
             <Ionicons 
@@ -443,6 +557,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
           }} 
           style={styles.actionButton}
           activeOpacity={0.7}
+          hitSlop={{ top: 10, right: 10, bottom: 10, left: 0 }}
         >
           <Ionicons 
             name={showComments ? "chatbubble" : "chatbubble-outline"} 
@@ -675,6 +790,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 24,
     paddingVertical: 6,
+  },
+  likeButtonContainer: {
+    minWidth: 80, // Give more touch area
+    paddingHorizontal: 2,
   },
   actionText: {
     fontSize: 14,

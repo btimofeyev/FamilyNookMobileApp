@@ -1,4 +1,4 @@
-// app/(tabs)/feed.js
+// app/(tabs)/feed.js - Updated with improved like handling
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View,
@@ -56,6 +56,23 @@ export default function FeedScreen() {
   const allLoadedPosts = useRef([]);
   const highlightTimerRef = useRef(null);
   const retryCount = useRef(0);
+  const isMounted = useRef(true);
+  
+  // Use this ref to track the most recent posts state to avoid stale closures
+  const postsRef = useRef(posts);
+  
+  // Update postsRef when posts state changes
+  useEffect(() => {
+    postsRef.current = posts;
+  }, [posts]);
+  
+  useEffect(() => {
+    isMounted.current = true;
+    
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   // Check if we should open the create post modal based on navigation params
   useEffect(() => {
@@ -77,7 +94,9 @@ export default function FeedScreen() {
       }
 
       highlightTimerRef.current = setTimeout(() => {
-        setHighlightedPostId(null);
+        if (isMounted.current) {
+          setHighlightedPostId(null);
+        }
       }, 2000);
 
       // Start search for the post
@@ -150,6 +169,8 @@ export default function FeedScreen() {
 
       // After loading, try to find the post index again
       setTimeout(() => {
+        if (!isMounted.current) return;
+        
         const updatedIndex = allLoadedPosts.current.findIndex(
           (post) => post.post_id?.toString() === postId
         );
@@ -172,7 +193,9 @@ export default function FeedScreen() {
       console.error("Error finding post:", error);
       handleLoadPostsError(error);
     } finally {
-      setLoading(false);
+      if (isMounted.current) {
+        setLoading(false);
+      }
     }
   };
 
@@ -290,12 +313,17 @@ export default function FeedScreen() {
         const newPosts = response.posts || [];
 
         if (refresh || currentPage === 1) {
+          // When refreshing, replace all posts with the new ones
           setPosts(newPosts);
           allLoadedPosts.current = newPosts;
         } else {
-          // Append new posts to existing ones for pagination
+          // Prevent duplicate posts when loading more
+          const existingPostIds = new Set(posts.map(p => p.post_id));
+          const uniqueNewPosts = newPosts.filter(p => !existingPostIds.has(p.post_id));
+          
+          // Append new unique posts to existing ones for pagination
           setPosts((prevPosts) => {
-            const updatedPosts = [...prevPosts, ...newPosts];
+            const updatedPosts = [...prevPosts, ...uniqueNewPosts];
             allLoadedPosts.current = updatedPosts;
             return updatedPosts;
           });
@@ -314,14 +342,16 @@ export default function FeedScreen() {
       } catch (error) {
         const shouldRetry = await handleLoadPostsError(error);
         
-        if (shouldRetry) {
+        if (shouldRetry && isMounted.current) {
           // Retry the request with the same parameters
           return loadPosts(refresh);
         }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
-        setLoadingMorePosts(false);
+        if (isMounted.current) {
+          setLoading(false);
+          setRefreshing(false);
+          setLoadingMorePosts(false);
+        }
       }
     },
     [selectedFamily, families, page, refreshUserSession, refreshFamilies]
@@ -343,6 +373,50 @@ export default function FeedScreen() {
       return () => {};
     }, [familyLoading, selectedFamily])
   );
+  
+  // Function to update a specific post in the list (for likes, comments, etc.)
+  const updatePostInList = (postId, updateData) => {
+    if (!postId) return;
+    
+    setPosts(currentPosts => {
+      // Find the post in the current list
+      const postIndex = currentPosts.findIndex(p => p.post_id.toString() === postId.toString());
+      
+      if (postIndex === -1) return currentPosts; // Post not found
+      
+      // Create a new array with the updated post
+      const updatedPosts = [...currentPosts];
+      updatedPosts[postIndex] = {
+        ...updatedPosts[postIndex],
+        ...updateData
+      };
+      
+      // Also update allLoadedPosts ref
+      allLoadedPosts.current = updatedPosts;
+      
+      return updatedPosts;
+    });
+  };
+  
+  // Handler for post updates (likes, comments, deletion)
+  const handlePostUpdated = useCallback((postId, updateData, isDeleted = false) => {
+    if (isDeleted) {
+      // If post was deleted, remove it from the list
+      setPosts(currentPosts => {
+        const updatedPosts = currentPosts.filter(
+          p => p.post_id.toString() !== postId.toString()
+        );
+        allLoadedPosts.current = updatedPosts;
+        return updatedPosts;
+      });
+    } else if (updateData) {
+      // If post was updated, update it in the list
+      updatePostInList(postId, updateData);
+    } else {
+      // If no specific update, refresh the feed
+      loadPosts(true);
+    }
+  }, []);
 
   // Move the render helper functions inside the component
   const renderFamilySelector = () => (
@@ -419,7 +493,42 @@ export default function FeedScreen() {
 
   const renderPostItem = ({ item, index }) => {
     const isHighlighted = item.post_id?.toString() === highlightedPostId;
-
+    
+    const handlePostUpdate = (postId, updateData, isDeleted = false) => {
+      if (isDeleted) {
+        // If post was deleted, remove it from the list
+        setPosts(currentPosts => {
+          const updatedPosts = currentPosts.filter(
+            p => p.post_id.toString() !== postId.toString()
+          );
+          allLoadedPosts.current = updatedPosts;
+          return updatedPosts;
+        });
+      } else if (updateData) {
+        // If post was updated, update it in the list
+        setPosts(currentPosts => {
+          const postIndex = currentPosts.findIndex(p => p.post_id.toString() === postId.toString());
+          
+          if (postIndex === -1) return currentPosts; // Post not found
+          
+          // Create a new array with the updated post
+          const updatedPosts = [...currentPosts];
+          updatedPosts[postIndex] = {
+            ...updatedPosts[postIndex],
+            ...updateData
+          };
+          
+          // Also update allLoadedPosts ref to keep it synchronized
+          allLoadedPosts.current = updatedPosts;
+          
+          return updatedPosts;
+        });
+      } else {
+        // If no specific update data provided, refresh the whole feed
+        loadPosts(true);
+      }
+    };
+  
     return (
       <View
         style={[
@@ -429,7 +538,13 @@ export default function FeedScreen() {
       >
         <PostItem
           post={item}
-          onPostUpdated={loadPosts}
+          onUpdate={(updateData) => {
+            if (updateData) {
+              handlePostUpdate(item.post_id, updateData);
+            } else {
+              handlePostUpdated(item.post_id);
+            }
+          }}
           isCurrentUser={user && item.author_id === user.id}
         />
       </View>
@@ -704,6 +819,15 @@ export default function FeedScreen() {
                 }
                 onScrollToIndexFailed={handleScrollToIndexFailed}
                 ListFooterComponent={renderLoadMoreButton}
+                // Add scroll dampening to reduce accidental likes
+                scrollEventThrottle={16}
+                decelerationRate="normal"
+                // Improve scroll performance
+                windowSize={5}
+                initialNumToRender={5}
+                maxToRenderPerBatch={5}
+                updateCellsBatchingPeriod={50}
+                removeClippedSubviews={true}
               />
               <FloatingCreateButton
                 onPress={() => setShowCreatePostModal(true)}

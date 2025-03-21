@@ -141,7 +141,6 @@ export default function FamilyDetailScreen() {
       console.error('Error copying to clipboard:', error);
     }
   };
-  
   const handleLeaveFamily = async () => {
     try {
       setLeaving(true);
@@ -154,8 +153,8 @@ export default function FamilyDetailScreen() {
       
       setShowLeaveConfirmModal(false);
       
-      // Navigate back to profile
-      router.replace('/profile');
+      // Navigate back to feed screen instead of profile
+      router.replace('/(tabs)/feed');
       
       // Show success message
       Alert.alert('Success', 'You have left the family group.');

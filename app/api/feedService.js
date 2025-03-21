@@ -1,6 +1,9 @@
-// app/api/feedService.js
+// app/api/feedService.js - Better like state persistence
 import apiClient from './client';
 import * as SecureStore from 'expo-secure-store';
+
+// Key for storing liked posts
+const LIKED_POSTS_KEY = 'liked_posts_v2';
 
 // Helper function to get current selected family ID
 const getSelectedFamilyId = async () => {
@@ -12,8 +15,40 @@ const getSelectedFamilyId = async () => {
   }
 };
 
+// Function to get the map of liked posts from storage
+const getLikedPostsMap = async () => {
+  try {
+    const likedPostsJson = await SecureStore.getItemAsync(LIKED_POSTS_KEY);
+    if (likedPostsJson) {
+      return JSON.parse(likedPostsJson);
+    }
+  } catch (error) {
+    console.error('Error getting liked posts from storage:', error);
+  }
+  return {};
+};
+
+// Function to save a post's liked state
+const saveLikedState = async (postId, isLiked) => {
+  try {
+    const likedPosts = await getLikedPostsMap();
+    
+    if (isLiked) {
+      likedPosts[postId.toString()] = true;
+    } else {
+      delete likedPosts[postId.toString()];
+    }
+    
+    await SecureStore.setItemAsync(LIKED_POSTS_KEY, JSON.stringify(likedPosts));
+    console.log('Saved like state:', { postId, isLiked, likedPosts });
+    return true;
+  } catch (error) {
+    console.error('Error saving liked state:', error);
+    return false;
+  }
+};
+
 export const getFamilyPosts = async (familyId, page = 1) => {
-  // If no family ID passed, try to get from storage
   if (!familyId) {
     familyId = await getSelectedFamilyId();
     
@@ -23,11 +58,12 @@ export const getFamilyPosts = async (familyId, page = 1) => {
   }
   
   try {
- 
-    // Add a longer timeout for post loading to handle potentially larger responses
+    console.log(`Fetching family posts for family ${familyId}, page ${page}`);
+    
+    // Get the posts from the API
     const response = await apiClient.get(`/api/family/${familyId}/posts`, {
       params: { page },
-      timeout: 30000 // 30 second timeout
+      timeout: 30000
     });
     
     if (!response.data) {
@@ -40,96 +76,64 @@ export const getFamilyPosts = async (familyId, page = 1) => {
       };
     }
 
+    // Get our local like state
+    const likedPostsMap = await getLikedPostsMap();
+    console.log('Local liked posts:', likedPostsMap);
+    
+    // Process each post to ensure it has the correct like state
+    const posts = response.data.posts || response.data || [];
+    const processedPosts = posts.map(post => {
+      // Get post ID as string for consistency
+      const postId = post.post_id.toString();
+      
+      // Check if this post is liked in our local storage
+      const isLocallyLiked = !!likedPostsMap[postId];
+      
+      return {
+        ...post,
+        // Override the API's is_liked with our local state
+        is_liked: isLocallyLiked,
+        // Ensure counts are numbers
+        likes_count: parseInt(post.likes_count || 0, 10),
+        comments_count: parseInt(post.comments_count || 0, 10)
+      };
+    });
     
     return {
-      posts: response.data.posts || response.data || [], // Handle different response structures
+      posts: processedPosts,
       currentPage: response.data.currentPage || page,
       totalPages: response.data.totalPages || 1,
-      totalPosts: response.data.totalPosts || (response.data.posts || response.data || []).length
+      totalPosts: response.data.totalPosts || processedPosts.length
     };
   } catch (error) {
     console.error('Error in getFamilyPosts:', error);
-    
-    if (error.response?.status === 401) {
-      console.error('Authentication error when fetching posts - token may be expired');
-    } else if (error.response?.status === 403) {
-      console.error('Permission error when fetching posts - user may not be a member of this family');
-    }
-    
-    // Let the calling component handle the error with our enhanced error handling
-    throw error;
-  }
-};
-
-export const createPost = async (familyId, data) => {
-  // If no family ID passed, try to get from storage
-  if (!familyId) {
-    familyId = await getSelectedFamilyId();
-    
-    if (!familyId) {
-      throw new Error('No family ID provided and no selected family found in storage');
-    }
-  }
-  
-  try {
-    console.log(`Creating post for family ${familyId}:`, data);
-    
-    const formData = new FormData();
-    formData.append('caption', data.caption);
-    formData.append('familyId', familyId);
-    
-    if (data.media) {
-      // Check if we're dealing with a video file
-      const isVideo = data.media.isVideo || data.media.type?.startsWith('video/');
-      
-      console.log('Adding media to post:', {
-        uri: data.media.uri,
-        type: data.media.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
-        name: data.media.fileName || `${isVideo ? 'video' : 'photo'}-${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`
-      });
-      
-      formData.append('media', {
-        uri: data.media.uri,
-        // Ensure we have a proper type
-        type: data.media.type || (isVideo ? 'video/mp4' : 'image/jpeg'),
-        // Ensure proper file name with extension
-        name: data.media.fileName || `${isVideo ? 'video' : 'photo'}-${Date.now()}.${isVideo ? 'mp4' : 'jpg'}`
-      });
-      
-      // Add the mediaType field to help the server identify what kind of media this is
-      formData.append('mediaType', isVideo ? 'video' : 'image');
-    }
-    
-    console.log('Form data prepared:', formData);
-    
-    const response = await apiClient.post(`/api/family/${familyId}/posts`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      // Increase timeout for media upload - videos can take longer
-      timeout: 120000 // 2 minutes
-    });
-
-    console.log('Post creation response:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Error creating post:', error);
-    
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-    }
-    
     throw error;
   }
 };
 
 export const toggleLike = async (postId) => {
   try {
-
+    console.log(`Toggling like for post ${postId}`);
+    
+    // Make the API call to toggle like
     const response = await apiClient.post(`/api/posts/${postId}/like`);
-
-    return response.data;
+    
+    // Get the action and count from the response
+    const action = response.data.action;
+    const likesCount = parseInt(response.data.likes_count || 0, 10);
+    
+    // Determine if the post is now liked
+    const isNowLiked = action === 'liked';
+    
+    // Save to local storage
+    await saveLikedState(postId, isNowLiked);
+    
+    // Return enhanced result
+    return {
+      ...response.data,
+      is_liked: isNowLiked,
+      likes_count: likesCount
+    };
   } catch (error) {
     console.error('Error toggling like:', error);
     throw error;
@@ -148,10 +152,8 @@ export const getComments = async (postId) => {
 
 export const addComment = async (postId, text, parentCommentId = null) => {
   try {
-    
     const payload = { text };
     
-    // Add parent comment ID if we are replying to a comment
     if (parentCommentId) {
       payload.parentCommentId = parentCommentId;
     }
@@ -168,7 +170,6 @@ export const deleteComment = async (postId, commentId) => {
   try {
     console.log(`Deleting comment ${commentId} from post ${postId}`);
     const response = await apiClient.delete(`/api/posts/${postId}/comments/${commentId}`);
-    console.log('Delete comment response:', response.data);
     return response.data;
   } catch (error) {
     console.error('Error deleting comment:', error);
@@ -180,7 +181,14 @@ export const deletePost = async (postId) => {
   try {
     console.log(`Deleting post ${postId}`);
     const response = await apiClient.delete(`/api/posts/${postId}`);
-    console.log('Delete post response:', response.data);
+    
+    // Also remove from liked posts storage
+    const likedPosts = await getLikedPostsMap();
+    if (likedPosts[postId]) {
+      delete likedPosts[postId.toString()];
+      await SecureStore.setItemAsync(LIKED_POSTS_KEY, JSON.stringify(likedPosts));
+    }
+    
     return response.data;
   } catch (error) {
     console.error('Error deleting post:', error);

@@ -15,6 +15,7 @@ import {
   Platform,
   FlatList,
   Animated,
+  Dimensions
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { useFamily } from "../../context/FamilyContext";
@@ -24,6 +25,7 @@ import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import * as SecureStore from "expo-secure-store";
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   getUserProfile,
   inviteToFamily,
@@ -387,6 +389,29 @@ export default function ProfileScreen() {
   const renderFamilyMemberCarousel = () => {
     const ITEM_SIZE = 80; // Size of each member avatar including spacing
     
+    // Calculate the width of the scroll indicator based on visible items
+    const screenWidth = Dimensions.get('window').width - 32; // Subtracting horizontal padding
+    const indicatorWidth = Math.min(screenWidth, 240); // Cap indicator width
+    
+    // Calculate indicator dimensions
+    const indicatorHeight = 8;
+    const dotWidth = 8;
+    const activeDotWidth = 24;
+    
+    // Use scrollX to calculate the current active index
+    const inputRange = familyMembers.map((_, i) => i * ITEM_SIZE);
+    const dotPosition = scrollX.interpolate({
+      inputRange,
+      outputRange: inputRange.map((_, i) => {
+        // Calculate position based on dot sizes
+        const basePosition = i * (dotWidth + 8);
+        // Account for the active dot being wider
+        const adjustment = (activeDotWidth - dotWidth) / 2;
+        return basePosition - adjustment;
+      }),
+      extrapolate: 'clamp'
+    });
+    
     return (
       <View style={styles.familyMembersCarouselContainer}>
         <Animated.FlatList
@@ -394,7 +419,10 @@ export default function ProfileScreen() {
           keyExtractor={(item) => item.id.toString()}
           horizontal
           showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.carouselContent}
+          contentContainerStyle={[
+            styles.carouselContent,
+            { paddingHorizontal: (screenWidth - ITEM_SIZE) / 2 } // Center the active item
+          ]}
           snapToInterval={ITEM_SIZE}
           decelerationRate="fast"
           onScroll={Animated.event(
@@ -440,6 +468,49 @@ export default function ProfileScreen() {
             );
           }}
         />
+        
+        {/* Modern Pill-style Indicator */}
+        <View style={styles.indicatorContainer}>
+          <View style={styles.indicatorTrack}>
+            {familyMembers.map((_, index) => (
+              <View 
+                key={index}
+                style={[
+                  styles.indicatorDot,
+                  {
+                    width: dotWidth,
+                    height: dotWidth,
+                    marginHorizontal: 4
+                  }
+                ]}
+              />
+            ))}
+            
+            {/* Animated active dot that moves with scroll */}
+            <Animated.View 
+              style={[
+                styles.activeDot,
+                {
+                  width: activeDotWidth,
+                  height: indicatorHeight,
+                  transform: [{ translateX: dotPosition }]
+                }
+              ]}
+            >
+              {/* Add a subtle gradient to the active dot */}
+              <LinearGradient
+                colors={['#4CC2C4', '#3BAFBC']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={{ 
+                  width: '100%', 
+                  height: '100%', 
+                  borderRadius: indicatorHeight / 2 
+                }}
+              />
+            </Animated.View>
+          </View>
+        </View>
       </View>
     );
   };
@@ -1268,4 +1339,35 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
   },
+  familyMembersCarouselContainer: {
+    height: 130,
+    marginVertical: 12,
+  },
+  carouselContent: {
+    alignItems: 'center',
+    paddingBottom: 20,
+  },
+  indicatorContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+    height: 20,
+  },
+  indicatorTrack: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 8,
+    position: 'relative',
+  },
+  indicatorDot: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 4,
+  },
+  activeDot: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    borderRadius: 4,
+  }
 });
