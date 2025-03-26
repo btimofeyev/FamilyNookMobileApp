@@ -399,16 +399,22 @@ export default function ProfileScreen() {
     const activeDotWidth = 24;
     
     // Use scrollX to calculate the current active index
-    const inputRange = familyMembers.map((_, i) => i * ITEM_SIZE);
+    // Add a check for minimum family members required
+    const inputRange = familyMembers.length >= 2 
+      ? familyMembers.map((_, i) => i * ITEM_SIZE)
+      : [0, ITEM_SIZE]; // Provide fallback values when not enough members
+  
     const dotPosition = scrollX.interpolate({
-      inputRange,
-      outputRange: inputRange.map((_, i) => {
-        // Calculate position based on dot sizes
-        const basePosition = i * (dotWidth + 8);
-        // Account for the active dot being wider
-        const adjustment = (activeDotWidth - dotWidth) / 2;
-        return basePosition - adjustment;
-      }),
+      inputRange: inputRange.length >= 2 ? inputRange : [0, ITEM_SIZE],
+      outputRange: inputRange.length >= 2 
+        ? inputRange.map((_, i) => {
+            // Calculate position based on dot sizes
+            const basePosition = i * (dotWidth + 8);
+            // Account for the active dot being wider
+            const adjustment = (activeDotWidth - dotWidth) / 2;
+            return basePosition - adjustment;
+          })
+        : [0, 0], // Fallback when not enough members
       extrapolate: 'clamp'
     });
     
@@ -432,21 +438,23 @@ export default function ProfileScreen() {
           renderItem={({ item, index }) => {
             const isCurrentUser = user && user.id === item.id;
             
-            // Create animation for the active item
-            const inputRange = [
-              (index - 1) * ITEM_SIZE,
-              index * ITEM_SIZE,
-              (index + 1) * ITEM_SIZE,
-            ];
-            
+            // Create animation for the active item with fallback values
+            const itemInputRange = familyMembers.length >= 3
+              ? [
+                  (index - 1) * ITEM_SIZE,
+                  index * ITEM_SIZE,
+                  (index + 1) * ITEM_SIZE,
+                ]
+              : [0, ITEM_SIZE, ITEM_SIZE * 2]; // Fallback values
+  
             const scale = scrollX.interpolate({
-              inputRange,
+              inputRange: itemInputRange,
               outputRange: [0.8, 1, 0.8],
               extrapolate: 'clamp',
             });
             
             const opacity = scrollX.interpolate({
-              inputRange,
+              inputRange: itemInputRange,
               outputRange: [0.6, 1, 0.6],
               extrapolate: 'clamp',
             });
@@ -469,48 +477,50 @@ export default function ProfileScreen() {
           }}
         />
         
-        {/* Modern Pill-style Indicator */}
-        <View style={styles.indicatorContainer}>
-          <View style={styles.indicatorTrack}>
-            {familyMembers.map((_, index) => (
-              <View 
-                key={index}
+        {/* Modern Pill-style Indicator - Only show when enough family members */}
+        {familyMembers.length >= 2 && (
+          <View style={styles.indicatorContainer}>
+            <View style={styles.indicatorTrack}>
+              {familyMembers.map((_, index) => (
+                <View 
+                  key={index}
+                  style={[
+                    styles.indicatorDot,
+                    {
+                      width: dotWidth,
+                      height: dotWidth,
+                      marginHorizontal: 4
+                    }
+                  ]}
+                />
+              ))}
+              
+              {/* Animated active dot that moves with scroll */}
+              <Animated.View 
                 style={[
-                  styles.indicatorDot,
+                  styles.activeDot,
                   {
-                    width: dotWidth,
-                    height: dotWidth,
-                    marginHorizontal: 4
+                    width: activeDotWidth,
+                    height: indicatorHeight,
+                    transform: [{ translateX: dotPosition }]
                   }
                 ]}
-              />
-            ))}
-            
-            {/* Animated active dot that moves with scroll */}
-            <Animated.View 
-              style={[
-                styles.activeDot,
-                {
-                  width: activeDotWidth,
-                  height: indicatorHeight,
-                  transform: [{ translateX: dotPosition }]
-                }
-              ]}
-            >
-              {/* Add a subtle gradient to the active dot */}
-              <LinearGradient
-                colors={['#4CC2C4', '#3BAFBC']}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={{ 
-                  width: '100%', 
-                  height: '100%', 
-                  borderRadius: indicatorHeight / 2 
-                }}
-              />
-            </Animated.View>
+              >
+                {/* Add a subtle gradient to the active dot */}
+                <LinearGradient
+                  colors={['#4CC2C4', '#3BAFBC']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={{ 
+                    width: '100%', 
+                    height: '100%', 
+                    borderRadius: indicatorHeight / 2 
+                  }}
+                />
+              </Animated.View>
+            </View>
           </View>
-        </View>
+        )}
       </View>
     );
   };

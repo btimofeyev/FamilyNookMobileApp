@@ -14,6 +14,59 @@ const getSelectedFamilyId = async () => {
     return null;
   }
 };
+export const createPost = async (familyId, data) => {
+  // If no family ID passed, try to get from storage
+  if (!familyId) {
+    familyId = await getSelectedFamilyId();
+    
+    if (!familyId) {
+      throw new Error('No family ID provided and no selected family found in storage');
+    }
+  }
+  
+  try {
+    console.log(`Creating post for family ${familyId}:`, data);
+    
+    const formData = new FormData();
+    formData.append('caption', data.caption);
+    formData.append('familyId', familyId);
+    
+    if (data.media) {
+      console.log('Adding media to post:', {
+        uri: data.media.uri,
+        type: data.media.type || 'image/jpeg',
+        name: data.media.fileName || `photo-${Date.now()}.jpg`
+      });
+      
+      formData.append('media', {
+        uri: data.media.uri,
+        name: data.media.fileName || `photo-${Date.now()}.jpg`,
+        type: data.media.type || 'image/jpeg'
+      });
+    }
+    
+    const response = await apiClient.post(`/api/family/${familyId}/posts`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      // Increase timeout for media upload
+      timeout: 60000 // 60 seconds
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('Error creating post:', error);
+    
+    if (error.response) {
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+    }
+    
+    throw error;
+  }
+};
+
+
 
 // Function to get the map of liked posts from storage
 const getLikedPostsMap = async () => {

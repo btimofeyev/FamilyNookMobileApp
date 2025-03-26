@@ -1,10 +1,13 @@
-// context/NotificationContext.js
+// Enhanced version of app/context/NotificationContext.js
+
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
-import { getNotifications, markAllAsRead, markAsRead, subscribeToPushNotifications } from '../app/api/notificationService';
+import { getNotifications, markAllAsRead, markAsRead, subscribeToPushNotifications, updateNotificationPreferences } from '../app/api/notificationService';
 import { useAuth } from './AuthContext';
 import * as Notifications from 'expo-notifications';
-import { Platform } from 'react-native';
+import { Platform, AppState } from 'react-native';
 import * as Device from 'expo-device';
+import Constants from 'expo-constants';
+import { router } from 'expo-router';
 
 const NotificationContext = createContext({});
 
@@ -17,6 +20,19 @@ export const NotificationProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [expoPushToken, setExpoPushToken] = useState('');
+  const [notificationPreferences, setNotificationPreferences] = useState({
+    like: true,
+    comment: true,
+    memory: true,
+    event: true,
+    post: true,
+    invitation: true,
+    mention: true
+  });
+  
+  const appState = React.useRef(AppState.currentState);
+  const notificationListener = React.useRef();
+  const responseListener = React.useRef();
 
   // Function to register for push notifications
   const registerForPushNotifications = async () => {
@@ -26,6 +42,7 @@ export const NotificationProvider = ({ children }) => {
     }
 
     try {
+      // Request permissions first
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
       let finalStatus = existingStatus;
 
@@ -40,8 +57,9 @@ export const NotificationProvider = ({ children }) => {
       }
 
       // Get the token
+      const projectId = Constants.expoConfig?.extra?.eas?.projectId || 'your-project-id';
       const token = await Notifications.getExpoPushTokenAsync({
-        projectId: process.env.EXPO_PROJECT_ID || 'your-project-id',
+        projectId
       });
       
       setExpoPushToken(token.data);
@@ -70,9 +88,8 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
-  // Set up notification handling
+  // Configure how notifications appear when app is in foreground
   useEffect(() => {
-    // Configure how notifications appear when the app is in the foreground
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -80,27 +97,76 @@ export const NotificationProvider = ({ children }) => {
         shouldSetBadge: true,
       }),
     });
+  
+    return () => {};
+  }, []);
 
+  // Set up notification listeners when authenticated
+  useEffect(() => {
     if (isAuthenticated) {
       // Set up notification handlers
-      const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-
+      notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
+        console.log('Notification received:', notification);
         fetchNotifications();
       });
 
-      const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-
+      responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
+        console.log('Notification response received:', response);
+        const url = response.notification.request.content.data?.url;
+        if (url) {
+          router.push(url);
+        }
       });
 
       // Register for push notifications
       registerForPushNotifications();
+      
+      // Monitor app state changes to refresh notifications when app comes to foreground
+      const subscription = AppState.addEventListener('change', nextAppState => {
+        if (
+          appState.current.match(/inactive|background/) && 
+          nextAppState === 'active'
+        ) {
+          console.log('App has come to the foreground, refreshing notifications');
+          fetchNotifications();
+        }
+        
+        appState.current = nextAppState;
+      });
 
       return () => {
-        Notifications.removeNotificationSubscription(notificationListener);
-        Notifications.removeNotificationSubscription(responseListener);
+        Notifications.removeNotificationSubscription(notificationListener.current);
+        Notifications.removeNotificationSubscription(responseListener.current);
+        subscription.remove();
       };
     }
   }, [isAuthenticated]);
+
+  // Fetch notification preferences
+  const fetchNotificationPreferences = useCallback(async () => {
+    if (!isAuthenticated) return;
+    
+    try {
+      const response = await getNotificationSettings();
+      if (response && response.preferences) {
+        setNotificationPreferences(response.preferences);
+      }
+    } catch (error) {
+      console.error('Error fetching notification preferences:', error);
+    }
+  }, [isAuthenticated]);
+
+  // Update notification preferences
+  const updatePreferences = async (preferences) => {
+    try {
+      await updateNotificationPreferences(preferences);
+      setNotificationPreferences(preferences);
+      return true;
+    } catch (error) {
+      console.error('Error updating notification preferences:', error);
+      return false;
+    }
+  };
 
   // Fetch notifications
   const fetchNotifications = useCallback(async () => {
@@ -117,6 +183,9 @@ export const NotificationProvider = ({ children }) => {
       
       // Update unread count
       setUnreadCount(data.unread?.length || 0);
+      
+      // Update badge count for iOS
+      await Notifications.setBadgeCountAsync(data.unread?.length || 0);
     } catch (error) {
       console.error('Error fetching notifications:', error);
       setError('Failed to load notifications');
@@ -129,11 +198,12 @@ export const NotificationProvider = ({ children }) => {
   useEffect(() => {
     if (isAuthenticated) {
       fetchNotifications();
+      fetchNotificationPreferences();
     } else {
       setNotifications([]);
       setUnreadCount(0);
     }
-  }, [isAuthenticated, fetchNotifications]);
+  }, [isAuthenticated, fetchNotifications, fetchNotificationPreferences]);
 
   // Mark a notification as read
   const markNotificationAsRead = async (notificationId) => {
@@ -156,6 +226,12 @@ export const NotificationProvider = ({ children }) => {
       
       // Update unread count
       setUnreadCount(prev => Math.max(0, prev - 1));
+      
+      // Update badge count for iOS
+      if (Platform.OS === 'ios') {
+        const newCount = Math.max(0, unreadCount - 1);
+        await Notifications.setBadgeCountAsync(newCount);
+      }
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -173,21 +249,15 @@ export const NotificationProvider = ({ children }) => {
       
       // Reset unread count
       setUnreadCount(0);
+      
+      // Reset badge count for iOS
+      if (Platform.OS === 'ios') {
+        await Notifications.setBadgeCountAsync(0);
+      }
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
     }
   };
-
-  // Check for new notifications periodically (every 5 minutes)
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const intervalId = setInterval(() => {
-      fetchNotifications();
-    }, 5 * 60 * 1000); // 5 minutes
-
-    return () => clearInterval(intervalId);
-  }, [isAuthenticated, fetchNotifications]);
 
   return (
     <NotificationContext.Provider
@@ -200,6 +270,8 @@ export const NotificationProvider = ({ children }) => {
         markNotificationAsRead,
         markAllNotificationsAsRead,
         expoPushToken,
+        notificationPreferences,
+        updateNotificationPreferences: updatePreferences
       }}
     >
       {children}

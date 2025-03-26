@@ -22,8 +22,37 @@ export const markAsRead = async (notificationId) => {
     throw error;
   }
 };
+export const getNotificationSettings = async () => {
+  try {
+    const response = await apiClient.get('/api/notifications/preferences');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching notification settings:', error);
+    // Return default preferences if there's an error
+    return {
+      preferences: {
+        like: true,
+        comment: true,
+        memory: true,
+        event: true,
+        post: true,
+        invitation: true,
+        mention: true
+      }
+    };
+  }
+};
 
-// Mark all notifications as read
+export const updateNotificationPreferences = async (preferences) => {
+  try {
+    const response = await apiClient.put('/api/notifications/preferences', preferences);
+    return response.data;
+  } catch (error) {
+    console.error('Error updating notification settings:', error);
+    throw error;
+  }
+};
+
 export const markAllAsRead = async () => {
   try {
     const response = await apiClient.post('/api/notifications/read-all');
