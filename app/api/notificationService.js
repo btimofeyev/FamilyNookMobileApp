@@ -1,5 +1,10 @@
 // app/api/notificationService.js
 import apiClient from './client';
+import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '@env';
+
+// Define API endpoint with fallback
+const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 // Fetch all notifications for the current user
 export const getNotifications = async () => {
@@ -22,6 +27,7 @@ export const markAsRead = async (notificationId) => {
     throw error;
   }
 };
+
 export const getNotificationSettings = async () => {
   try {
     const response = await apiClient.get('/api/notifications/preferences');
@@ -63,21 +69,44 @@ export const markAllAsRead = async () => {
   }
 };
 
-// Subscribe to push notifications
+// Update this function to properly send the Expo push token with direct fetch
 export const subscribeToPushNotifications = async (pushToken) => {
   try {
-    const subscription = {
-      endpoint: pushToken,
-      keys: {
-        p256dh: 'placeholder-for-expo-push', // Expo Push doesn't require these typical web push keys
-        auth: 'placeholder-for-expo-push'     // but your backend might expect this structure
-      }
-    };
+    if (!pushToken) {
+      console.error('No push token provided');
+      return { success: false, error: 'No push token provided' };
+    }
     
-    const response = await apiClient.post('/api/notifications/push/subscribe', subscription);
-    return response.data;
+    console.log('Subscribing push token to server:', pushToken);
+    
+    // Get auth token
+    const authToken = await SecureStore.getItemAsync('auth_token');
+    if (!authToken) {
+      console.error('No auth token found for push registration');
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    // Using direct fetch for maximum debug visibility
+    const response = await fetch(`${API_ENDPOINT}/api/notifications/push/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authToken}` 
+      },
+      body: JSON.stringify({ token: pushToken })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Server error (${response.status}):`, errorText);
+      throw new Error(`Server error: ${response.status} - ${errorText}`);
+    }
+    
+    const data = await response.json();
+    console.log('Push token registration response:', data);
+    return { success: true, data };
   } catch (error) {
     console.error('Error subscribing to push notifications:', error);
-    throw error;
+    return { success: false, error: error.message };
   }
 };

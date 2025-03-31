@@ -22,10 +22,11 @@
       },
       "package": "com.btimofeyev.familynook",
       "versionCode": 1,
-      "permissions": [],
+      "permissions": ["NOTIFICATIONS"],
       "config": {
         "usesCleartextTraffic": true
-      }
+      },
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/mainlogo.png"
@@ -41,6 +42,19 @@
     },
     "updates": {
       "url": "https://u.expo.dev/024ae2e1-c689-4f1d-99c7-df5af4322a34"
-    }
+    },
+    "plugins": [
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/mainlogo.png",
+          "color": "#000000",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "FamilyNook",
+          "iosDisplayInForeground": true
+        }
+      ]
+    ]
   }
 }

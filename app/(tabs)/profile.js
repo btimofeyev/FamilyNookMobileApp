@@ -38,6 +38,7 @@ import { generateFamilyPasskey } from "../api/familyService";
 import { BlurView } from "expo-blur";
 import PostItem from "../components/PostItem";
 import MemberAvatar from "../components/MemberAvatar"; // We'll create this component
+import PushNotificationTest from '../components/PushNotificationTest';
 
 // Function to get a random color from the app's color palette
 const getRandomColor = () => {
@@ -939,8 +940,9 @@ export default function ProfileScreen() {
               </View>
             )}
           </BlurView>
+          
         )}
-
+<PushNotificationTest />
         {renderInviteModal()}
         {renderPasskeyModal()}
         {renderJoinFamilyModal()}

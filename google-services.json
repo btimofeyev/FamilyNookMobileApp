@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "737415401372",
+    "project_id": "fir-b8498",
+    "storage_bucket": "fir-b8498.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:737415401372:android:d7cb6adbf85d9f7639c259",
+        "android_client_info": {
+          "package_name": "com.btimofeyev.familynook"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "737415401372-i3q434r89aoeigl15at8ara806ihesie.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAfBjXRgppoO3lCX-uAjWkM7J8aJEpnFeY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "737415401372-i3q434r89aoeigl15at8ara806ihesie.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

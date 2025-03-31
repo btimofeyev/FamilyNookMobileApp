@@ -1,13 +1,17 @@
-// Enhanced version of app/context/NotificationContext.js
-
+// context/NotificationContext.js
 import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
 import { getNotifications, markAllAsRead, markAsRead, subscribeToPushNotifications, updateNotificationPreferences } from '../app/api/notificationService';
 import { useAuth } from './AuthContext';
 import * as Notifications from 'expo-notifications';
-import { Platform, AppState } from 'react-native';
 import * as Device from 'expo-device';
+import { Platform, AppState, Alert } from 'react-native';
 import Constants from 'expo-constants';
 import { router } from 'expo-router';
+import * as SecureStore from 'expo-secure-store';
+import { API_URL } from '@env';
+
+// Define API endpoint with fallback
+const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 const NotificationContext = createContext({});
 
@@ -30,66 +34,162 @@ export const NotificationProvider = ({ children }) => {
     mention: true
   });
   
+  console.log('NotificationContext rendering, auth state:', isAuthenticated, 'user:', user?.id);
+  
   const appState = React.useRef(AppState.currentState);
   const notificationListener = React.useRef();
   const responseListener = React.useRef();
+  const registrationAttempted = React.useRef(false);
 
-  // Function to register for push notifications
+  // Enhanced version of registerForPushNotifications
   const registerForPushNotifications = async () => {
+    console.log('Starting push notification registration...');
+    
     if (!Device.isDevice) {
-      console.log('Push Notifications are not available on simulator');
+      console.log('Push Notifications are not available on simulator/emulator');
       return;
     }
 
+    if (!isAuthenticated) {
+      console.log('User not authenticated, skipping push registration');
+      return;
+    }
+
+    if (registrationAttempted.current) {
+      console.log('Push registration already attempted, skipping');
+      return;
+    }
+
+    registrationAttempted.current = true;
+
     try {
       // Request permissions first
+      console.log('Checking notification permissions...');
       const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      console.log('Current permission status:', existingStatus);
+      
       let finalStatus = existingStatus;
-
       if (existingStatus !== 'granted') {
+        console.log('Requesting permission...');
         const { status } = await Notifications.requestPermissionsAsync();
         finalStatus = status;
+        console.log('New permission status:', finalStatus);
       }
 
       if (finalStatus !== 'granted') {
-        console.log('Failed to get push token: permission not granted!');
+        console.log('Permission not granted for push notifications');
         return;
       }
 
-      // Get the token
-      const projectId = Constants.expoConfig?.extra?.eas?.projectId || 'your-project-id';
-      const token = await Notifications.getExpoPushTokenAsync({
-        projectId
-      });
+      console.log('Permissions granted, getting push token...');
       
-      setExpoPushToken(token.data);
+      // Get the token - try different approaches
+      let tokenData;
+      
+      try {
+        // First try with projectId if available
+        const projectId = Constants.expoConfig?.extra?.eas?.projectId;
+        console.log('Project ID from config:', projectId);
+        
+        if (projectId) {
+          console.log('Getting push token with projectId:', projectId);
+          tokenData = await Notifications.getExpoPushTokenAsync({
+            projectId
+          });
+        } else {
+          // Fallback to basic token request
+          console.log('No projectId found, getting basic push token');
+          tokenData = await Notifications.getExpoPushTokenAsync();
+        }
+      } catch (tokenError) {
+        console.error('Error getting token with projectId:', tokenError);
+        // Last resort fallback
+        console.log('Trying fallback token request');
+        tokenData = await Notifications.getExpoPushTokenAsync();
+      }
+      
+      const token = tokenData.data;
+      console.log('EXPO PUSH TOKEN GENERATED:', token);
+      setExpoPushToken(token);
 
       // Send token to backend
-      if (isAuthenticated && token.data) {
+      if (isAuthenticated && token) {
+        console.log('User is authenticated, sending token to server...');
         try {
-          await subscribeToPushNotifications(token.data);
-          console.log('Successfully subscribed to push notifications');
-        } catch (error) {
-          console.error('Error subscribing to push notifications:', error);
+          // Get auth token from secure storage
+          const authToken = await SecureStore.getItemAsync('auth_token');
+          console.log('Auth token available:', !!authToken);
+          
+          if (!authToken) {
+            console.error('No auth token available, cannot register push token');
+            return;
+          }
+          
+          console.log(`Sending request to ${API_ENDPOINT}/api/notifications/push/subscribe`);
+          const response = await fetch(`${API_ENDPOINT}/api/notifications/push/subscribe`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ token })
+          });
+          
+          if (!response.ok) {
+            throw new Error(`Server responded with status ${response.status}`);
+          }
+          
+          const result = await response.json();
+          console.log('Server response from token registration:', result);
+          
+          // Alert for debugging purposes - remove in production
+          Alert.alert(
+            'Push Token Registered', 
+            `Token: ${token.substring(0, 12)}...`,
+            [{ text: 'OK' }]
+          );
+        } catch (serverError) {
+          console.error('Failed to register token with server:', serverError);
+          
+          // Alert for debugging - remove in production
+          Alert.alert(
+            'Push Registration Error', 
+            serverError.message,
+            [{ text: 'OK' }]
+          );
         }
+      } else {
+        console.log('User not authenticated or no token, skipping server registration');
       }
 
-      // Required for Android
+      // Set up Android channel
       if (Platform.OS === 'android') {
-        Notifications.setNotificationChannelAsync('default', {
+        console.log('Setting up Android notification channel...');
+        await Notifications.setNotificationChannelAsync('default', {
           name: 'default',
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
         });
+        console.log('Android notification channel set up');
       }
+      
+      console.log('Push notification registration completed successfully');
     } catch (error) {
       console.error('Error registering for push notifications:', error);
+      
+      // Alert for debugging - remove in production
+      Alert.alert(
+        'Push Setup Error', 
+        error.message,
+        [{ text: 'OK' }]
+      );
     }
   };
 
   // Configure how notifications appear when app is in foreground
   useEffect(() => {
+    console.log('Setting up notification handler');
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -103,22 +203,29 @@ export const NotificationProvider = ({ children }) => {
 
   // Set up notification listeners when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
+    console.log('NotificationContext useEffect triggered, auth state:', isAuthenticated, 'user ID:', user?.id);
+
+    if (isAuthenticated && user?.id) {
+      console.log('Setting up notification listeners for authenticated user');
+      
       // Set up notification handlers
       notificationListener.current = Notifications.addNotificationReceivedListener(notification => {
-        console.log('Notification received:', notification);
+        console.log('Notification received in foreground:', notification);
+        // Refresh notifications when we receive a new one
         fetchNotifications();
       });
 
       responseListener.current = Notifications.addNotificationResponseReceivedListener(response => {
-        console.log('Notification response received:', response);
+        console.log('User tapped on notification:', response);
         const url = response.notification.request.content.data?.url;
         if (url) {
+          console.log('Navigating to:', url);
           router.push(url);
         }
       });
 
       // Register for push notifications
+      console.log('Calling registerForPushNotifications...');
       registerForPushNotifications();
       
       // Monitor app state changes to refresh notifications when app comes to foreground
@@ -135,12 +242,17 @@ export const NotificationProvider = ({ children }) => {
       });
 
       return () => {
-        Notifications.removeNotificationSubscription(notificationListener.current);
-        Notifications.removeNotificationSubscription(responseListener.current);
+        console.log('Cleaning up notification listeners');
+        if (notificationListener.current) {
+          Notifications.removeNotificationSubscription(notificationListener.current);
+        }
+        if (responseListener.current) {
+          Notifications.removeNotificationSubscription(responseListener.current);
+        }
         subscription.remove();
       };
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.id]);
 
   // Fetch notification preferences
   const fetchNotificationPreferences = useCallback(async () => {
@@ -259,6 +371,13 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
+  // Add manual push notification test
+  const testPushNotification = async () => {
+    console.log('Testing push notification registration...');
+    registrationAttempted.current = false; // Reset the flag to force a new attempt
+    await registerForPushNotifications();
+  };
+
   return (
     <NotificationContext.Provider
       value={{
@@ -271,7 +390,8 @@ export const NotificationProvider = ({ children }) => {
         markAllNotificationsAsRead,
         expoPushToken,
         notificationPreferences,
-        updateNotificationPreferences: updatePreferences
+        updateNotificationPreferences: updatePreferences,
+        testPushNotification // Add the test function to the context
       }}
     >
       {children}
