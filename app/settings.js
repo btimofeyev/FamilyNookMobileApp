@@ -1,4 +1,4 @@
-// app/(screens)/settings.js - Create this file
+// app/(screens)/settings.js
 import React from "react";
 import {
   View,
@@ -28,7 +28,7 @@ export default function SettingsScreen() {
         onPress: async () => {
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           await logout();
-          router.replace("/login");
+          router.replace("/(auth)/login");
         },
       },
     ]);
@@ -53,6 +53,7 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Account</Text>
 
           <View style={styles.settingsContainer}>
+            {/* Edit Profile - Commented out for future implementation 
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => router.push("/edit-profile")}
@@ -61,7 +62,9 @@ export default function SettingsScreen() {
               <Text style={styles.settingText}>Edit Profile</Text>
               <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
             </TouchableOpacity>
+            */}
 
+            {/* Notification Preferences - Commented out for future implementation 
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => router.push("/notification-preferences")}
@@ -74,7 +77,9 @@ export default function SettingsScreen() {
               <Text style={styles.settingText}>Notification Preferences</Text>
               <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
             </TouchableOpacity>
+            */}
 
+            {/* Privacy Settings - Commented out for future implementation 
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => router.push("/privacy-settings")}
@@ -83,6 +88,8 @@ export default function SettingsScreen() {
               <Text style={styles.settingText}>Privacy Settings</Text>
               <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
             </TouchableOpacity>
+            */}
+            
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => router.push("/notification-settings")}
@@ -95,14 +102,7 @@ export default function SettingsScreen() {
               <Text style={styles.settingText}>Notification Settings</Text>
               <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
             </TouchableOpacity>
-          </View>
-        </BlurView>
 
-        {/* Legal and Policies */}
-        <BlurView intensity={20} tint="dark" style={styles.section}>
-          <Text style={styles.sectionTitle}>Legal and Policies</Text>
-
-          <View style={styles.settingsContainer}>
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => router.push("/privacy-policy")}
@@ -115,7 +115,14 @@ export default function SettingsScreen() {
               <Text style={styles.settingText}>Privacy Policy</Text>
               <Ionicons name="chevron-forward" size={18} color="#8E8E93" />
             </TouchableOpacity>
+          </View>
+        </BlurView>
 
+        {/* Legal and Policies */}
+        <BlurView intensity={20} tint="dark" style={styles.section}>
+          <Text style={styles.sectionTitle}>Legal and Policies</Text>
+
+          <View style={styles.settingsContainer}>
             <TouchableOpacity
               style={styles.settingItem}
               onPress={() => router.push("/terms-of-service")}

@@ -89,12 +89,15 @@ export const FamilyProvider = ({ children }) => {
       setLoading(true);
       setError(null);
       
+      // Add a delay to ensure auth token is properly set in headers
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       // Check if this is a fresh registration before trying to refresh
       const registrationTime = await SecureStore.getItemAsync('registration_time');
       const isNewAccount = await SecureStore.getItemAsync('is_new_account');
       const isRecentRegistration = registrationTime && 
         (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000; // 5 minutes
-        
+      
       // For new accounts, handle specially
       if (isNewAccount === 'true' && isRecentRegistration) {
         console.log('New account detected, checking if family_id already exists');
@@ -106,40 +109,31 @@ export const FamilyProvider = ({ children }) => {
           if (parsedUser.family_id) {
             console.log('User already has family_id in storage:', parsedUser.family_id);
             
-            // Create a synthetic family object
-            const syntheticFamily = {
-              family_id: parsedUser.family_id,
-              family_name: 'My Family' // Default name until we load the real one
-            };
-            
-            setFamilies([syntheticFamily]);
-            setSelectedFamily(syntheticFamily);
-            await SecureStore.setItemAsync('selected_family_id', syntheticFamily.family_id.toString());
-            
-            // Still try to get actual family data in the background
             try {
-              const userFamilies = await getUserFamilies();
-              if (userFamilies && userFamilies.length > 0) {
-                setFamilies(userFamilies);
+              // Explicitly try to fetch the family by ID to verify it exists
+              const response = await apiClient.get(`/api/dashboard/families/${parsedUser.family_id}`);
+              
+              if (response.data) {
+                // Create a synthetic family object with real data
+                const syntheticFamily = {
+                  family_id: parsedUser.family_id,
+                  family_name: response.data.family_name || 'My Family'
+                };
                 
-                // Update selected family with complete info
-                const actualFamily = userFamilies.find(f => f.family_id.toString() === parsedUser.family_id.toString());
-                if (actualFamily) {
-                  setSelectedFamily(actualFamily);
-                }
+                setFamilies([syntheticFamily]);
+                setSelectedFamily(syntheticFamily);
+                await SecureStore.setItemAsync('selected_family_id', syntheticFamily.family_id.toString());
+                
+                setLoading(false);
+                setFamiliesInitialized(true);
+                return;
               }
-            } catch (bgError) {
-              console.log('Background family data load failed, using synthetic family');
+            } catch (error) {
+              console.log('Error fetching family details, will try getUserFamilies:', error);
+              // Continue with normal flow if this fails
             }
-            
-            setLoading(false);
-            setFamiliesInitialized(true);
-            return;
           }
         }
-        
-        console.log('New account detected, skipping family retry logic');
-        retryCount.current = maxRetries; // Prevent retries
       }
       
       // Try to refresh user session if forceRefresh is true (after failed attempt)
@@ -149,7 +143,6 @@ export const FamilyProvider = ({ children }) => {
           await refreshUserSession();
         } catch (refreshError) {
           console.log('Could not refresh session before loading families, but continuing anyway');
-          // Just continue with current token, no need to report error
         }
       }
       
@@ -157,25 +150,19 @@ export const FamilyProvider = ({ children }) => {
       const userFamilies = await getUserFamilies();
       console.log('Loaded families:', userFamilies);
       
-      // If no families but user is authenticated, might be a temporary issue
-      if (userFamilies.length === 0) {
+      // Important: Ensure families state is updated even if empty array
+      setFamilies(userFamilies || []);
+      
+      // If no families and we're authenticated, make another attempt
+      if (userFamilies.length === 0 && isAuthenticated) {
         const shouldTryAgain = await shouldRetry();
         if (shouldTryAgain && !isRecentRegistration) {
           console.log('No families returned, will retry in a moment...');
-          
-          // Wait briefly before retrying
           setTimeout(() => loadFamilies(true), 1500);
           return;
         }
-      }
-      
-      // Reset retry count on success or if we're done retrying
-      retryCount.current = 0;
-      
-      setFamilies(userFamilies);
-      
-      if (userFamilies.length === 0) {
-        console.log('No families returned from API');
+        
+        // Even with empty families, mark as initialized to prevent infinite loading
         setSelectedFamily(null);
         await SecureStore.deleteItemAsync('selected_family_id');
         setFamiliesInitialized(true);
@@ -183,94 +170,64 @@ export const FamilyProvider = ({ children }) => {
         return;
       }
       
-      // Get previously selected family
-      const savedFamilyId = await SecureStore.getItemAsync('selected_family_id');
-      console.log('Saved family ID:', savedFamilyId);
+      // Reset retry count on success
+      retryCount.current = 0;
       
-      if (savedFamilyId && userFamilies.some(f => f.family_id.toString() === savedFamilyId)) {
-        const familyToSelect = userFamilies.find(f => f.family_id.toString() === savedFamilyId);
-        console.log('Setting previously selected family:', familyToSelect);
-        setSelectedFamily(familyToSelect);
-      } else if (userFamilies.length > 0) {
-        // Default to first family
-        console.log('Setting default family (first in list):', userFamilies[0]);
-        setSelectedFamily(userFamilies[0]);
-        await SecureStore.setItemAsync('selected_family_id', userFamilies[0].family_id.toString());
+      if (userFamilies.length > 0) {
+        // Get previously selected family
+        const savedFamilyId = await SecureStore.getItemAsync('selected_family_id');
+        console.log('Saved family ID:', savedFamilyId);
         
-        // Update the user info with the primary family id if updateUserInfo is available
-        if (updateUserInfo && typeof updateUserInfo === 'function') {
-          try {
-            await updateUserInfo({ primary_family_id: userFamilies[0].family_id });
-            console.log('Updated user primary_family_id to:', userFamilies[0].family_id);
-          } catch (updateError) {
-            console.error('Error updating user primary family ID:', updateError);
-            // Continue without updating user info
-          }
+        if (savedFamilyId && userFamilies.some(f => f.family_id.toString() === savedFamilyId)) {
+          const familyToSelect = userFamilies.find(f => f.family_id.toString() === savedFamilyId);
+          console.log('Setting previously selected family:', familyToSelect);
+          setSelectedFamily(familyToSelect);
+        } else {
+          // Default to first family
+          console.log('Setting default family (first in list):', userFamilies[0]);
+          setSelectedFamily(userFamilies[0]);
+          await SecureStore.setItemAsync('selected_family_id', userFamilies[0].family_id.toString());
         }
+      } else {
+        // Clear selected family if no families exist
+        setSelectedFamily(null);
       }
       
       setFamiliesInitialized(true);
     } catch (err) {
       console.error('Error loading families:', err);
       
-      // Check if this is a fresh registration
-      const registrationTime = await SecureStore.getItemAsync('registration_time');
-      const isRecentRegistration = registrationTime && 
-        (Date.now() - parseInt(registrationTime)) < 30000; // 30 seconds
-      
-      // For fresh registrations, don't treat this as an error
-      if (isRecentRegistration) {
-        console.log('Recent registration detected, expected to have no families yet');
-        setFamilies([]);
-        setError(null);
-        setFamiliesInitialized(true);
-        setLoading(false);
-        return;
-      }
-      
-      // Handle authentication errors
+      // Check if auth error and try to refresh session
       if (err.response?.status === 401 || err.response?.status === 403) {
         const shouldTryAgain = await shouldRetry();
         if (shouldTryAgain) {
           console.log('Auth error when loading families, will retry with refresh...');
           setTimeout(() => loadFamilies(true), 1500);
           return;
-        } else {
-          // If we've exceeded retries, force logout
-          console.log('Auth error persists after max retries, logging out...');
-          if (logout) {
-            await logout(false);
-          }
         }
       }
       
+      // Always set families to empty array on error to avoid undefined
+      setFamilies([]);
       setError('Failed to load your families. Please try again.');
       
-      // If persistent errors, notify user
-      if (retryCount.current >= maxRetries) {
-        // Reset for future attempts
-        retryCount.current = 0;
-        
-        // Show alert only if we're still authenticated
-        if (isAuthenticated) {
-          Alert.alert(
-            "Connection Issue",
-            "We're having trouble loading your family information. Please try again later.",
-            [{ text: "OK" }]
-          );
-        }
-      }
+      // Still mark as initialized to prevent infinite loading state
+      setFamiliesInitialized(true);
     } finally {
       setLoading(false);
-      setFamiliesInitialized(true);
     }
   }, [isAuthenticated, token, refreshUserSession, logout, updateUserInfo]);
-
-  // Load families when auth status changes
+  
+  // Add a more robust useEffect to handle family loading
   useEffect(() => {
     // Only load families if auth is initialized
     if (authInitialized) {
-      loadFamilies(false);
+      // Add a small delay to ensure auth is fully processed
+      const timer = setTimeout(() => {
+        loadFamilies(false);
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
   }, [authInitialized, isAuthenticated, token, loadFamilies]);
 

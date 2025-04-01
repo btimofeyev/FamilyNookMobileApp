@@ -142,21 +142,9 @@ export const NotificationProvider = ({ children }) => {
           const result = await response.json();
           console.log('Server response from token registration:', result);
           
-          // Alert for debugging purposes - remove in production
-          Alert.alert(
-            'Push Token Registered', 
-            `Token: ${token.substring(0, 12)}...`,
-            [{ text: 'OK' }]
-          );
         } catch (serverError) {
           console.error('Failed to register token with server:', serverError);
-          
-          // Alert for debugging - remove in production
-          Alert.alert(
-            'Push Registration Error', 
-            serverError.message,
-            [{ text: 'OK' }]
-          );
+
         }
       } else {
         console.log('User not authenticated or no token, skipping server registration');
@@ -177,13 +165,7 @@ export const NotificationProvider = ({ children }) => {
       console.log('Push notification registration completed successfully');
     } catch (error) {
       console.error('Error registering for push notifications:', error);
-      
-      // Alert for debugging - remove in production
-      Alert.alert(
-        'Push Setup Error', 
-        error.message,
-        [{ text: 'OK' }]
-      );
+
     }
   };
 
@@ -371,13 +353,6 @@ export const NotificationProvider = ({ children }) => {
     }
   };
 
-  // Add manual push notification test
-  const testPushNotification = async () => {
-    console.log('Testing push notification registration...');
-    registrationAttempted.current = false; // Reset the flag to force a new attempt
-    await registerForPushNotifications();
-  };
-
   return (
     <NotificationContext.Provider
       value={{
@@ -391,7 +366,7 @@ export const NotificationProvider = ({ children }) => {
         expoPushToken,
         notificationPreferences,
         updateNotificationPreferences: updatePreferences,
-        testPushNotification // Add the test function to the context
+
       }}
     >
       {children}

@@ -413,10 +413,21 @@ export default function FeedScreen() {
       // If post was updated, update it in the list
       updatePostInList(postId, updateData);
     } else {
-      // If no specific update, refresh the feed
-      loadPosts(true);
+      // If no specific update, refresh the feed BUT preserve selectedFamily
+      if (selectedFamily) {
+        // Explicitly use the current selectedFamily to prevent the error
+        loadPosts(true);
+      } else {
+        // Handle the case where selectedFamily is null
+        console.warn("Cannot refresh posts: No family selected");
+        // Try to recover the family from context
+        if (families && families.length > 0) {
+          console.log("Attempting to recover selected family from families list");
+          switchFamily(families[0]);
+        }
+      }
     }
-  }, []);
+  }, [selectedFamily, families, switchFamily]);
 
   // Move the render helper functions inside the component
   const renderFamilySelector = () => (

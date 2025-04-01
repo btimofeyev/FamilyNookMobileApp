@@ -19,6 +19,8 @@
       "adaptiveIcon": {
         "image": "./assets/mainlogo.png",
         "backgroundColor": "#000000"
+
+
       },
       "package": "com.btimofeyev.familynook",
       "versionCode": 1,
@@ -26,7 +28,12 @@
       "config": {
         "usesCleartextTraffic": true
       },
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "jsEngine": "hermes",
+      "splash": {
+        "resizeMode": "contain",
+        "backgroundColor": "#000000"
+      }
     },
     "web": {
       "favicon": "./assets/mainlogo.png"
