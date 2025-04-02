@@ -13,18 +13,24 @@
       "backgroundColor": "#000000"
     },
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.btimofeyev.familynook",
+      "buildNumber": "1",
+      "supportsTablet": true,
+      "jsEngine": "hermes",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
         "image": "./assets/mainlogo.png",
         "backgroundColor": "#000000"
-
-
       },
       "package": "com.btimofeyev.familynook",
       "versionCode": 1,
-      "permissions": ["NOTIFICATIONS"],
+      "permissions": [
+        "NOTIFICATIONS"
+      ],
       "config": {
         "usesCleartextTraffic": true
       },

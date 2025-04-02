@@ -10,7 +10,6 @@ import axios from 'axios';
 import { API_URL } from '@env';
 import { useFamily } from '../../context/FamilyContext';
 
-// Fallback in case env variable isn't loaded
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 export default function LoginScreen() {
@@ -22,46 +21,9 @@ export default function LoginScreen() {
   const { families, refreshFamilies, loading: familyLoading } = useFamily();
   const router = useRouter();
 
-  useEffect(() => {
-    // Log environment information
-    console.log('Environment check:');
-    console.log('API_URL from env:', API_URL);
-    console.log('API_ENDPOINT being used:', API_ENDPOINT);
-    console.log('Full endpoint URL:', `${API_ENDPOINT}/api/health`);
-    
-    const testConnection = async () => {
-      try {
-        console.log('Testing API connection...');
-        console.log('Request URL:', `${API_ENDPOINT}/api/health`);
-        
-        const response = await axios.get(`${API_ENDPOINT}/api/health`);
-        console.log('API connection successful:', response.data);
-        console.log('Response headers:', response.headers);
-        console.log('Response status:', response.status);
-      } catch (error) {
-        console.error('API connection failed:', {
-          message: error.message,
-          code: error.code,
-          status: error.response?.status,
-          headers: error.response?.headers,
-          data: error.response?.data,
-          request: error.request ? 'Request was made but no response' : 'Request setup failed'
-        });
-        
-        // Log network info if available
-        console.log('Network info:', {
-          online: typeof navigator !== 'undefined' && navigator.onLine
-        });
-      }
-    };
-    
-    testConnection();
-  }, []);
-
   const validateInputs = () => {
     let isValid = true;
 
-    // Email validation
     if (!email.trim()) {
       setEmailError('Email is required');
       isValid = false;
@@ -72,7 +34,6 @@ export default function LoginScreen() {
       setEmailError('');
     }
 
-    // Password validation
     if (!password) {
       setPasswordError('Password is required');
       isValid = false;
@@ -90,73 +51,53 @@ export default function LoginScreen() {
     if (!validateInputs()) return;
 
     const result = await login(email, password);
-    console.log('Login result - ignoring family_id as it is not reliable:', result);
     
     if (result.success) {
       try {
-        // Start loading families
-        console.log('Starting family refresh...');
         await refreshFamilies();
         
-        // Get the initial families data
         const response = await axios.get(`${API_ENDPOINT}/api/dashboard/user/families`);
-        console.log('Direct families API response:', response.data);
         
         if (response.data && response.data.length > 0) {
-          console.log('User has families from direct API check:', response.data);
           setTimeout(() => {
             router.push('/(tabs)/feed');
           }, 100);
           return;
         }
         
-        // If no families found in direct check, wait for context to update
         let attempts = 0;
-        const maxAttempts = 50; // 5 seconds max
+        const maxAttempts = 50;
         
         while (attempts < maxAttempts) {
-          // Wait a bit between checks
           await new Promise(resolve => setTimeout(resolve, 100));
           attempts++;
           
-          // Skip if still loading
           if (familyLoading) {
-            console.log('Still loading families in context, waiting... (attempt', attempts, 'of', maxAttempts, ')');
             continue;
           }
           
-          // Check context data
           if (families && families.length > 0) {
-            console.log('Found families in context:', families);
             setTimeout(() => {
               router.push('/(tabs)/feed');
             }, 100);
             return;
           }
           
-          // If loading is complete and no families found, break
           if (!familyLoading) {
-            console.log('Family loading complete, no families found');
             break;
           }
         }
         
-        // If we get here, no families were found
-        console.log('No families found after all checks, proceeding to family setup');
         setTimeout(() => {
           router.push('/(auth)/family-setup');
         }, 100);
         
       } catch (error) {
-        console.error('Error checking families:', error);
-        // Even on error, check the context one last time
         if (families && families.length > 0) {
-          console.log('Found families in error handler:', families);
           setTimeout(() => {
             router.push('/(tabs)/feed');
           }, 100);
         } else {
-          console.log('No families found in error handler, proceeding to setup');
           setTimeout(() => {
             router.push('/(auth)/family-setup');
           }, 100);
@@ -270,7 +211,7 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    backgroundColor: '#1E2B2F', // Midnight Green background
+    backgroundColor: '#1E2B2F',
   },
   logoContainer: {
     alignItems: 'center',
@@ -285,14 +226,14 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#F5F5F7', // Soft White for the app name
+    color: '#F5F5F7',
     marginTop: 16,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
-    letterSpacing: -0.5, // Apple-style tighter letter spacing
+    letterSpacing: -0.5,
   },
   tagline: {
     fontSize: 16,
-    color: '#8E8E93', // Slate Gray for the tagline
+    color: '#8E8E93',
     marginTop: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     letterSpacing: -0.2,
@@ -304,14 +245,14 @@ const styles = StyleSheet.create({
     paddingTop: 40,
     paddingBottom: 40,
     paddingHorizontal: 24,
-    backgroundColor: 'rgba(18, 18, 18, 0.85)', // Onyx Black with opacity
+    backgroundColor: 'rgba(18, 18, 18, 0.85)',
     overflow: 'hidden',
   },
   title: {
     fontSize: 28,
     fontWeight: '600',
     marginBottom: 32,
-    color: '#F5F5F7', // Soft White for the title
+    color: '#F5F5F7',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
     letterSpacing: -0.5,
   },
@@ -320,7 +261,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    color: '#F5F5F7', // Soft White for labels
+    color: '#F5F5F7',
     marginBottom: 8,
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
@@ -328,12 +269,12 @@ const styles = StyleSheet.create({
   input: {
     height: 54,
     borderWidth: 1,
-    borderColor: 'rgba(59, 175, 188, 0.3)', // Subtle Teal Glow for borders
+    borderColor: 'rgba(59, 175, 188, 0.3)',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: 'rgba(18, 18, 18, 0.6)', // Slightly transparent Onyx Black
-    color: '#F5F5F7', // Soft White for text
+    backgroundColor: 'rgba(18, 18, 18, 0.6)',
+    color: '#F5F5F7',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     shadowColor: 'rgba(0, 0, 0, 0.3)',
     shadowOffset: { width: 0, height: 2 },
@@ -341,10 +282,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
   },
   inputError: {
-    borderColor: '#FF453A', // Apple's system red color
+    borderColor: '#FF453A',
   },
   errorText: {
-    color: '#FF453A', // Apple's system red color
+    color: '#FF453A',
     fontSize: 14,
     marginTop: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
@@ -359,7 +300,7 @@ const styles = StyleSheet.create({
   },
   forgotPassword: {
     fontSize: 15,
-    color: '#3BAFBC', // Teal Glow for interactive elements
+    color: '#3BAFBC',
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
@@ -380,7 +321,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
-    color: '#F5F5F7', // Soft White for button text
+    color: '#F5F5F7',
     fontSize: 16,
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
@@ -393,12 +334,12 @@ const styles = StyleSheet.create({
   },
   signupText: {
     fontSize: 15,
-    color: '#8E8E93', // Slate Gray for secondary text
+    color: '#8E8E93',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   signupLink: {
     fontSize: 15,
-    color: '#3BAFBC', // Teal Glow for interactive links
+    color: '#3BAFBC',
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },

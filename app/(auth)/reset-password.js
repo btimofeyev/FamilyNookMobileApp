@@ -1,4 +1,3 @@
-// app/(auth)/reset-password.js
 import React, { useState, useEffect } from 'react';
 import { 
   View, 
@@ -18,7 +17,6 @@ import { StatusBar } from 'expo-status-bar';
 import axios from 'axios';
 import { API_URL } from '@env';
 
-// Fallback in case env variable isn't loaded
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 export default function ResetPasswordScreen() {
@@ -42,8 +40,6 @@ export default function ResetPasswordScreen() {
         "The password reset link is invalid or has expired.",
         [{ text: "OK", onPress: () => router.push('/login') }]
       );
-    } else {
-      console.log("Token received:", token);
     }
   }, [token]);
 
@@ -87,7 +83,6 @@ export default function ResetPasswordScreen() {
   };
 
   const handleResetPassword = async () => {
-    // Reset any previous errors
     setError('');
     
     const isPasswordValid = validatePassword();
@@ -97,26 +92,18 @@ export default function ResetPasswordScreen() {
 
     setLoading(true);
     try {
-      console.log(`Sending reset request to ${API_ENDPOINT}/api/auth/reset-password with token: ${token}`);
-      
-      // Call reset password API
       const response = await axios.post(`${API_ENDPOINT}/api/auth/reset-password`, { 
         token, 
         password 
       });
       
-      console.log('Reset password response:', response.data);
-      
       setSuccess(true);
       
-      // Navigate to login after 2 seconds
       setTimeout(() => {
         router.push('/login');
       }, 2000);
       
     } catch (error) {
-      console.log('Error resetting password:', error.response?.data || error.message);
-      
       setError(
         error.response?.data?.error || 
         "Failed to reset password. The link may have expired."
@@ -127,9 +114,9 @@ export default function ResetPasswordScreen() {
   };
 
   const getStrengthColor = () => {
-    if (passwordStrength < 50) return '#FF3B30'; // Red
-    if (passwordStrength < 75) return '#FFCC00'; // Yellow
-    return '#34C759'; // Green
+    if (passwordStrength < 50) return '#FF3B30';
+    if (passwordStrength < 75) return '#FFCC00';
+    return '#34C759';
   };
 
   const getStrengthText = () => {

@@ -22,7 +22,6 @@ export default function RegisterScreen() {
   const validateInputs = () => {
     let isValid = true;
 
-    // Name validation
     if (!name.trim()) {
       setNameError('Name is required');
       isValid = false;
@@ -30,7 +29,6 @@ export default function RegisterScreen() {
       setNameError('');
     }
 
-    // Email validation
     if (!email.trim()) {
       setEmailError('Email is required');
       isValid = false;
@@ -41,7 +39,6 @@ export default function RegisterScreen() {
       setEmailError('');
     }
 
-    // Password validation
     if (!password) {
       setPasswordError('Password is required');
       isValid = false;
@@ -52,7 +49,6 @@ export default function RegisterScreen() {
       setPasswordError('');
     }
 
-    // Confirm password validation
     if (password !== confirmPassword) {
       setConfirmPasswordError('Passwords do not match');
       isValid = false;
@@ -65,16 +61,7 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!validateInputs()) return;
-
-    // Register user without a passkey - family setup will be handled separately
-    const result = await register(name, email, password);
-    
-    if (result.success) {
-      console.log('Registration successful, main layout will handle redirection');
-      // No need for explicit redirect - main layout will handle it based on auth state
-    } else {
-      console.log('Registration failed:', result.message);
-    }
+    await register(name, email, password);
   };
 
   return (
@@ -163,8 +150,6 @@ export default function RegisterScreen() {
             {confirmPasswordError ? <Text style={styles.errorText}>{confirmPasswordError}</Text> : null}
           </View>
 
-
-
           <TouchableOpacity 
             style={styles.buttonContainer} 
             onPress={handleRegister}
@@ -202,7 +187,7 @@ export default function RegisterScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1E2B2F', // Midnight Green background
+    backgroundColor: '#1E2B2F',
   },
   scrollView: {
     flex: 1,
@@ -223,14 +208,14 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#F5F5F7', // Soft White for the app name
+    color: '#F5F5F7',
     marginTop: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
-    letterSpacing: -0.5, // Apple-style tight letter spacing
+    letterSpacing: -0.5,
   },
   tagline: {
     fontSize: 16,
-    color: '#8E8E93', // Slate Gray for the tagline
+    color: '#8E8E93',
     marginTop: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     letterSpacing: -0.2,
@@ -241,9 +226,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingTop: 32,
     paddingBottom: 36,
-    backgroundColor: 'rgba(18, 18, 18, 0.85)', // Onyx Black with opacity
+    backgroundColor: 'rgba(18, 18, 18, 0.85)',
     overflow: 'hidden',
-    shadowColor: 'rgba(0, 0, 0, 0.8)', // Deep Shadow
+    shadowColor: 'rgba(0, 0, 0, 0.8)',
     shadowOffset: { width: 0, height: 5 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -253,7 +238,7 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '600',
     marginBottom: 32,
-    color: '#F5F5F7', // Soft White for the title
+    color: '#F5F5F7',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
     letterSpacing: -0.5,
   },
@@ -262,7 +247,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    color: '#F5F5F7', // Soft White for labels
+    color: '#F5F5F7',
     marginBottom: 8,
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
@@ -270,12 +255,12 @@ const styles = StyleSheet.create({
   input: {
     height: 54,
     borderWidth: 1,
-    borderColor: 'rgba(59, 175, 188, 0.3)', // Subtle Teal Glow for borders
+    borderColor: 'rgba(59, 175, 188, 0.3)',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
-    backgroundColor: 'rgba(18, 18, 18, 0.6)', // Slightly transparent Onyx Black
-    color: '#F5F5F7', // Soft White for text
+    backgroundColor: 'rgba(18, 18, 18, 0.6)',
+    color: '#F5F5F7',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     shadowColor: 'rgba(0, 0, 0, 0.3)',
     shadowOffset: { width: 0, height: 2 },
@@ -283,15 +268,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
   },
   inputError: {
-    borderColor: '#FF453A', // Apple's system red color
+    borderColor: '#FF453A',
   },
   errorText: {
-    color: '#FF453A', // Apple's system red color
+    color: '#FF453A',
     fontSize: 14,
     marginTop: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-
   buttonContainer: {
     height: 54,
     borderRadius: 12,
@@ -310,7 +294,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   buttonText: {
-    color: '#F5F5F7', // Soft White for button text
+    color: '#F5F5F7',
     fontSize: 16,
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
@@ -323,12 +307,12 @@ const styles = StyleSheet.create({
   },
   loginText: {
     fontSize: 15,
-    color: '#8E8E93', // Slate Gray for secondary text
+    color: '#8E8E93',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   loginLink: {
     fontSize: 15,
-    color: '#3BAFBC', // Teal Glow for interactive links
+    color: '#3BAFBC',
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },

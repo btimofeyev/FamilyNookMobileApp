@@ -6,7 +6,6 @@ import { StatusBar } from 'expo-status-bar';
 import axios from 'axios';
 import { API_URL } from '@env';
 
-// Fallback in case env variable isn't loaded
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
 export default function ForgotPasswordScreen() {
@@ -33,12 +32,7 @@ export default function ForgotPasswordScreen() {
 
     setLoading(true);
     try {
-      console.log('Attempting to send reset password request to:', `${API_ENDPOINT}/api/auth/forgot-password`);
-      console.log('Using email:', email);
-      
-      // Call password reset API
-      const response = await axios.post(`${API_ENDPOINT}/api/auth/forgot-password`, { email });
-      console.log('Reset password response:', response.data);
+      await axios.post(`${API_ENDPOINT}/api/auth/forgot-password`, { email });
       
       Alert.alert(
         "Reset Link Sent",
@@ -46,12 +40,6 @@ export default function ForgotPasswordScreen() {
         [{ text: "OK", onPress: () => router.back() }]
       );
     } catch (error) {
-      console.error('Reset password error:', error);
-      console.error('Error response:', error.response?.data);
-      console.error('Error status:', error.response?.status);
-      
-      // We don't want to reveal if an email exists in our system for security reasons,
-      // so we show a generic success message even if the request fails
       Alert.alert(
         "Reset Link Sent",
         "If an account exists with this email, you will receive a password reset link shortly.",

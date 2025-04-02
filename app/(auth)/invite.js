@@ -46,7 +46,6 @@ export default function InviteScreen() {
   const validateInputs = () => {
     let isValid = true;
 
-    // Name validation
     if (!name.trim()) {
       setNameError('Name is required');
       isValid = false;
@@ -54,7 +53,6 @@ export default function InviteScreen() {
       setNameError('');
     }
 
-    // Password validation
     if (!password) {
       setPasswordError('Password is required');
       isValid = false;
@@ -65,7 +63,6 @@ export default function InviteScreen() {
       setPasswordError('');
     }
 
-    // Confirm password validation
     if (password !== confirmPassword) {
       setConfirmPasswordError('Passwords do not match');
       isValid = false;

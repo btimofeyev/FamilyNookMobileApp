@@ -10,20 +10,14 @@ export default function AuthLayout() {
   const router = useRouter();
 
   useEffect(() => {
-    // Skip redirection during initial loading or before auth is initialized
     if (loading || !authInitialized || !familiesInitialized) return;
 
-    // If user is already authenticated and has a family, redirect to the main app
     if (isAuthenticated && determineUserHasFamily()) {
-      console.log('User is authenticated and has a family, redirecting to feed');
       router.replace('/(tabs)');
     } 
-    // If user is authenticated but doesn't have a family, send to family setup
     else if (isAuthenticated && !determineUserHasFamily()) {
-      console.log('User is authenticated but needs family setup');
       router.replace('/(family-setup)');
     }
-    // Otherwise, stay on the auth screens
   }, [isAuthenticated, user, loading, authInitialized, familiesInitialized, determineUserHasFamily]);
 
   return (
