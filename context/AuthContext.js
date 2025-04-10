@@ -1,5 +1,5 @@
-// context/AuthContext.js
-import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
+// context/AuthContext.js - Improved version
+import React, { createContext, useState, useEffect, useContext, useRef, useCallback } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import axios from 'axios';
 import { API_URL } from '@env';
@@ -18,9 +18,18 @@ export const AuthProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [authInitialized, setAuthInitialized] = useState(false);
   
-  const isRefreshing = useRef(false);
+  // Single refreshTokenPromise to prevent multiple simultaneous refreshes
+  const refreshTokenPromise = useRef(null);
   const lastAuthCheck = useRef(Date.now());
   
+  // Clear the refresh promise when component unmounts
+  useEffect(() => {
+    return () => {
+      refreshTokenPromise.current = null;
+    };
+  }, []);
+  
+  // Listen to auth events from the API client
   useEffect(() => {
     const unsubscribe = authEvents.subscribe((event) => {
       switch (event.type) {
@@ -29,27 +38,25 @@ export const AuthProvider = ({ children }) => {
           lastAuthCheck.current = Date.now();
           break;
           
-        case 'refresh_failed':
-          if (event.retryCount && event.retryCount > 3) {
-            Alert.alert(
-              "Session Issue",
-              "We're having trouble maintaining your session. You'll stay logged in, but some features may be limited.",
-              [{ text: "OK" }]
-            );
-          }
-          break;
+          case 'refresh_failed':
+            if (event.retryCount && event.retryCount > 3) {
+              Alert.alert(
+                "Session Expired",
+                "Your session has expired. Please log in again to continue.",
+                [{ text: "OK", onPress: async () => {
+                  // Call logout with false to avoid trying to call the server again
+                  await logout(false);
+                  // Redirect to login screen
+                  router.replace('/(auth)/login');
+                }}]
+              );
+            }
+            break;
           
         case 'authentication_required':
-          if (!isRefreshing.current) {
-            isRefreshing.current = true;
-            refreshUserSession()
-              .catch(error => {
-                console.log('Failed to refresh session, but keeping user logged in:', error.message);
-              })
-              .finally(() => {
-                isRefreshing.current = false;
-              });
-          }
+          refreshUserSession().catch(error => {
+            console.log('Failed to refresh session:', error.message);
+          });
           break;
       }
     });
@@ -57,108 +64,12 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
+  // Load persisted auth state on startup
   useEffect(() => {
-    const loadAuthState = async () => {
-      try {
-        const storedToken = await SecureStore.getItemAsync('auth_token');
-        
-        if (storedToken) {
-          const refreshToken = await SecureStore.getItemAsync('refresh_token');
-          
-          const tempHeaders = axios.defaults.headers.common['Authorization'];
-          axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
-          
-          try {
-            await apiClient.get('/api/dashboard/profile', { timeout: 5000 });
-            
-            setToken(storedToken);
-            
-            const storedUser = await SecureStore.getItemAsync('user');
-            if (storedUser) {
-              setUser(JSON.parse(storedUser));
-            }
-          } catch (validationError) {
-            if (refreshToken) {
-              try {
-                const response = await axios.post(
-                  `${API_ENDPOINT}/api/auth/refresh-token`,
-                  { refreshToken },
-                  { timeout: 15000 }
-                );
-                
-                if (response.data.token) {
-                  const newToken = response.data.token;
-                  await SecureStore.setItemAsync('auth_token', newToken);
-                  
-                  if (response.data.refreshToken) {
-                    await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
-                  }
-                  
-                  setToken(newToken);
-                  axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-                  
-                  try {
-                    const userResponse = await apiClient.get('/api/dashboard/profile');
-                    if (userResponse.data) {
-                      setUser(userResponse.data);
-                      await SecureStore.setItemAsync('user', JSON.stringify(userResponse.data));
-                    }
-                  } catch (userError) {
-                    const storedUser = await SecureStore.getItemAsync('user');
-                    if (storedUser) {
-                      setUser(JSON.parse(storedUser));
-                    }
-                  }
-                } else {
-                  setToken(storedToken);
-                  
-                  const storedUser = await SecureStore.getItemAsync('user');
-                  if (storedUser) {
-                    setUser(JSON.parse(storedUser));
-                  }
-                }
-              } catch (refreshError) {
-                setToken(storedToken);
-                
-                const storedUser = await SecureStore.getItemAsync('user');
-                if (storedUser) {
-                  setUser(JSON.parse(storedUser));
-                }
-                
-                if (tempHeaders) {
-                  axios.defaults.headers.common['Authorization'] = tempHeaders;
-                } else {
-                  delete axios.defaults.headers.common['Authorization'];
-                }
-              }
-            } else {
-              setToken(storedToken);
-              
-              const storedUser = await SecureStore.getItemAsync('user');
-              if (storedUser) {
-                setUser(JSON.parse(storedUser));
-              }
-              
-              if (tempHeaders) {
-                axios.defaults.headers.common['Authorization'] = tempHeaders;
-              } else {
-                delete axios.defaults.headers.common['Authorization'];
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.error('Failed to load auth state:', e);
-      } finally {
-        setLoading(false);
-        setAuthInitialized(true);
-        lastAuthCheck.current = Date.now();
-      }
-    };
-    
     loadAuthState();
   }, []);
 
+  // Check and refresh token periodically
   useEffect(() => {
     if (!token) return;
     
@@ -168,15 +79,10 @@ export const AuthProvider = ({ children }) => {
       const now = Date.now();
       const timeSinceLastCheck = now - lastAuthCheck.current;
       
-      if (timeSinceLastCheck > tokenRefreshInterval && !isRefreshing.current) {
-        isRefreshing.current = true;
-        try {
-          await refreshUserSession();
-        } catch (error) {
+      if (timeSinceLastCheck > tokenRefreshInterval) {
+        refreshUserSession().catch(error => {
           console.error('Proactive token refresh failed:', error.message);
-        } finally {
-          isRefreshing.current = false;
-        }
+        });
       }
     };
 
@@ -189,73 +95,149 @@ export const AuthProvider = ({ children }) => {
     };
   }, [token]);
 
-  const refreshUserSession = async () => {
-    if (isRefreshing.current) return;
-    
-    isRefreshing.current = true;
+  // Load the initial authentication state
+  const loadAuthState = async () => {
     try {
-      const registrationTime = await SecureStore.getItemAsync('registration_time');
-      const isNewAccount = await SecureStore.getItemAsync('is_new_account');
+      // Retrieve stored token
+      const storedToken = await SecureStore.getItemAsync('auth_token');
       
-      const isRecentRegistration = registrationTime && 
-        (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000;
-      
-      if (isNewAccount === 'true' && isRecentRegistration) {
-        return true;
+      if (!storedToken) {
+        finalizeAuthInit();
+        return;
       }
       
-      const refreshToken = await SecureStore.getItemAsync('refresh_token');
+      // Set token in auth state
+      setToken(storedToken);
       
-      if (!refreshToken) {
-        throw new Error('No refresh token available');
-      }
-  
-      const response = await axios.post(
-        `${API_ENDPOINT}/api/auth/refresh-token`,
-        { refreshToken },
-        { 
-          withCredentials: true,
-          timeout: 15000
+      // Try to load stored user
+      const storedUser = await SecureStore.getItemAsync('user');
+      if (storedUser) {
+        try {
+          setUser(JSON.parse(storedUser));
+        } catch (e) {
+          console.warn('Failed to parse stored user data');
         }
-      );
-      
-      if (!response.data || !response.data.token) {
-        throw new Error('Invalid refresh response');
       }
       
-      const { token: newToken, refreshToken: newRefreshToken } = response.data;
-      
-      await SecureStore.setItemAsync('auth_token', newToken);
-      
-      if (newRefreshToken) {
-        await SecureStore.setItemAsync('refresh_token', newRefreshToken);
-      }
-      
-      setToken(newToken);
-      
-      axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
-      
+      // Verify token validity or refresh if needed
       try {
-        const userResponse = await apiClient.get('/api/dashboard/profile');
-        if (userResponse.data) {
-          setUser(userResponse.data);
-          await SecureStore.setItemAsync('user', JSON.stringify(userResponse.data));
+        // Update authorization header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        
+        // Perform a quick validation request
+        await apiClient.get('/api/dashboard/profile', { timeout: 5000 });
+        
+        // Token is valid, simply update lastAuthCheck
+        lastAuthCheck.current = Date.now();
+      } catch (validationError) {
+        // Token validation failed, try to refresh
+        try {
+          await refreshUserSession();
+        } catch (refreshError) {
+          // Keep using the stored token even if refresh fails
+          console.warn('Token refresh failed during initialization, using stored token');
         }
-      } catch (userError) {
-        console.warn('Could not refresh user profile, but continuing with token refresh');
       }
-      
-      lastAuthCheck.current = Date.now();
-      resetAuthState();
-      
-      return true;
-    } catch (error) {
-      console.error('Session refresh failed:', error.message);
-      throw error;
+    } catch (e) {
+      console.error('Failed to load auth state:', e);
     } finally {
-      isRefreshing.current = false;
+      finalizeAuthInit();
     }
   };
+  
+  // Helper to finalize auth initialization
+  const finalizeAuthInit = () => {
+    setLoading(false);
+    setAuthInitialized(true);
+  };
+
+  // Improved token refresh function that prevents race conditions
+  const refreshUserSession = useCallback(async () => {
+    // If a refresh is already in progress, return that promise
+    if (refreshTokenPromise.current) {
+      return refreshTokenPromise.current;
+    }
+    
+    // Create a new refresh promise
+    refreshTokenPromise.current = (async () => {
+      try {
+        // Check if this is a new account (special case)
+        const registrationTime = await SecureStore.getItemAsync('registration_time');
+        const isNewAccount = await SecureStore.getItemAsync('is_new_account');
+        
+        const isRecentRegistration = registrationTime && 
+          (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000;
+        
+        if (isNewAccount === 'true' && isRecentRegistration) {
+          return true;
+        }
+        
+        // Get refresh token from storage
+        const refreshToken = await SecureStore.getItemAsync('refresh_token');
+        
+        if (!refreshToken) {
+          throw new Error('No refresh token available');
+        }
+      
+        // Request new tokens
+        const response = await axios.post(
+          `${API_ENDPOINT}/api/auth/refresh-token`,
+          { refreshToken },
+          { 
+            withCredentials: true,
+            timeout: 15000
+          }
+        );
+        
+        // Validate response
+        if (!response.data || !response.data.token) {
+          throw new Error('Invalid refresh response');
+        }
+        
+        // Extract tokens
+        const { token: newToken, refreshToken: newRefreshToken } = response.data;
+        
+        // Update storage
+        await Promise.all([
+          SecureStore.setItemAsync('auth_token', newToken),
+          newRefreshToken ? SecureStore.setItemAsync('refresh_token', newRefreshToken) : Promise.resolve()
+        ]);
+        
+        // Update state
+        setToken(newToken);
+        
+        // Update axios defaults
+        axios.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+        
+        // Try to update user data
+        try {
+          const userResponse = await apiClient.get('/api/dashboard/profile');
+          if (userResponse.data) {
+            setUser(userResponse.data);
+            await SecureStore.setItemAsync('user', JSON.stringify(userResponse.data));
+          }
+        } catch (userError) {
+          console.warn('Could not refresh user profile, but continuing with token refresh');
+        }
+        
+        // Update last auth check time
+        lastAuthCheck.current = Date.now();
+        
+        // Reset API client auth state
+        resetAuthState();
+        
+        return true;
+      } catch (error) {
+        console.error('Session refresh failed:', error.message);
+        throw error;
+      } finally {
+        // Always clear the promise reference when done
+        refreshTokenPromise.current = null;
+      }
+    })();
+    
+    return refreshTokenPromise.current;
+  }, []);
 
   const login = async (email, password) => {
     try {
@@ -269,29 +251,35 @@ export const AuthProvider = ({ children }) => {
       
       const { token: authToken, user: userData, refreshToken } = response.data;
       
-      const hasFamily = userData.families && userData.families.length > 0 || 
-                        userData.primary_family_id || 
-                        userData.family_id;
+      const hasFamily = !!(userData.families?.length > 0 || 
+                         userData.primary_family_id || 
+                         userData.family_id);
       
-      await SecureStore.setItemAsync('auth_token', authToken);
-      if (refreshToken) {
-        await SecureStore.setItemAsync('refresh_token', refreshToken);
-      }
-      await SecureStore.setItemAsync('user', JSON.stringify(userData));
+      // Update storage in parallel for better performance
+      await Promise.all([
+        SecureStore.setItemAsync('auth_token', authToken),
+        refreshToken ? SecureStore.setItemAsync('refresh_token', refreshToken) : Promise.resolve(),
+        SecureStore.setItemAsync('user', JSON.stringify(userData)),
+        (userData.families?.length > 0) ? 
+          SecureStore.setItemAsync('selected_family_id', userData.families[0].family_id.toString()) :
+          (userData.primary_family_id) ?
+            SecureStore.setItemAsync('selected_family_id', userData.primary_family_id.toString()) :
+            (userData.family_id) ?
+              SecureStore.setItemAsync('selected_family_id', userData.family_id.toString()) :
+              Promise.resolve()
+      ]);
       
-      if (userData.families && userData.families.length > 0) {
-        await SecureStore.setItemAsync('selected_family_id', userData.families[0].family_id.toString());
-      } else if (userData.primary_family_id) {
-        await SecureStore.setItemAsync('selected_family_id', userData.primary_family_id.toString());
-      } else if (userData.family_id) {
-        await SecureStore.setItemAsync('selected_family_id', userData.family_id.toString());
-      }
-      
+      // Update state
       setToken(authToken);
       setUser(userData);
+      
+      // Reset API client auth state
       resetAuthState();
       
+      // Update axios defaults
       axios.defaults.headers.common['Authorization'] = `Bearer ${authToken}`;
+      
+      // Update last auth check time
       lastAuthCheck.current = Date.now();
       
       return { 
@@ -307,7 +295,7 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     }
   };
-
+  
   const register = async (name, email, password, passkey = null) => {
     try {
       setLoading(true);
@@ -321,16 +309,14 @@ export const AuthProvider = ({ children }) => {
       const { token: authToken, user: userData } = response.data;
       
       const now = Date.now();
-      await SecureStore.setItemAsync('registration_time', now.toString());
-      await SecureStore.setItemAsync('is_new_account', 'true');
-      
-      await SecureStore.setItemAsync('auth_token', authToken);
-      
-      if (response.data.refreshToken) {
-        await SecureStore.setItemAsync('refresh_token', response.data.refreshToken);
-      }
-      
-      await SecureStore.setItemAsync('user', JSON.stringify(userData));
+      await Promise.all([
+        SecureStore.setItemAsync('registration_time', now.toString()),
+        SecureStore.setItemAsync('is_new_account', 'true'),
+        SecureStore.setItemAsync('auth_token', authToken),
+        response.data.refreshToken ? 
+          SecureStore.setItemAsync('refresh_token', response.data.refreshToken) : Promise.resolve(),
+        SecureStore.setItemAsync('user', JSON.stringify(userData))
+      ]);
       
       setToken(authToken);
       setUser(userData);
@@ -369,11 +355,11 @@ export const AuthProvider = ({ children }) => {
       
       const { token: authToken, user: userData, refreshToken } = response.data;
       
-      await SecureStore.setItemAsync('auth_token', authToken);
-      if (refreshToken) {
-        await SecureStore.setItemAsync('refresh_token', refreshToken);
-      }
-      await SecureStore.setItemAsync('user', JSON.stringify(userData));
+      await Promise.all([
+        SecureStore.setItemAsync('auth_token', authToken),
+        refreshToken ? SecureStore.setItemAsync('refresh_token', refreshToken) : Promise.resolve(),
+        SecureStore.setItemAsync('user', JSON.stringify(userData))
+      ]);
       
       setToken(authToken);
       setUser(userData);
@@ -405,10 +391,12 @@ export const AuthProvider = ({ children }) => {
       console.error('Logout error:', e);
     } finally {
       try {
-        await SecureStore.deleteItemAsync('auth_token');
-        await SecureStore.deleteItemAsync('refresh_token');
-        await SecureStore.deleteItemAsync('user');
-        await SecureStore.deleteItemAsync('selected_family_id');
+        await Promise.all([
+          SecureStore.deleteItemAsync('auth_token'),
+          SecureStore.deleteItemAsync('refresh_token'),
+          SecureStore.deleteItemAsync('user'),
+          SecureStore.deleteItemAsync('selected_family_id')
+        ]);
       } catch (storageError) {
         console.error('Error clearing secure storage:', storageError);
       }
@@ -422,10 +410,12 @@ export const AuthProvider = ({ children }) => {
 
   const forceCleanAuthState = async () => {
     try {
-      await SecureStore.deleteItemAsync('auth_token');
-      await SecureStore.deleteItemAsync('refresh_token');
-      await SecureStore.deleteItemAsync('user');
-      await SecureStore.deleteItemAsync('selected_family_id');
+      await Promise.all([
+        SecureStore.deleteItemAsync('auth_token'),
+        SecureStore.deleteItemAsync('refresh_token'),
+        SecureStore.deleteItemAsync('user'),
+        SecureStore.deleteItemAsync('selected_family_id')
+      ]);
       
       setToken(null);
       setUser(null);

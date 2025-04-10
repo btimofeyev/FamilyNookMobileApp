@@ -18,7 +18,7 @@
         "buildType": "app-bundle",
         "gradleCommand": ":app:bundleRelease"
       },
-      "distribution": "internal",
+      "distribution": "store",
       "channel": "beta",
       "autoIncrement": true
     },
@@ -30,11 +30,25 @@
       "channel": "beta-apk"
     },
     "production": {
+      "distribution": "store",
       "autoIncrement": true,
       "channel": "production"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "elianajimenez13@live.com",
+        "ascAppId": "6744259863",
+        "companyName": "Ben Timofeyev"
+      }
+    },
+    "beta": {
+      "ios": {
+        "appleId": "elianajimenez13@live.com",
+        "ascAppId": "6744259863",
+        "companyName": "Ben Timofeyev"
+      }
+    }
   }
 }

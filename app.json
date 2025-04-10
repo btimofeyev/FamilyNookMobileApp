@@ -67,7 +67,15 @@
           "androidCollapsedTitle": "FamilyNook",
           "iosDisplayInForeground": true
         }
-      ]
+      ],
+      [
+      "expo-build-properties",
+      {
+        "ios": {
+          "useFrameworks": "static"
+        }
+      }
+    ]
     ]
   }
 }

@@ -1,6 +1,29 @@
-// app/api/feedService.js - Better like state persistence
+// app/api/feedService.js
+
 import apiClient from './client';
 import * as SecureStore from 'expo-secure-store';
+import { Alert } from 'react-native';
+
+// Custom error class for API-specific errors
+class FeedServiceError extends Error {
+  constructor(message, code, originalError = null) {
+    super(message);
+    this.name = 'FeedServiceError';
+    this.code = code;
+    this.originalError = originalError;
+  }
+}
+
+// Error codes for specific error types
+const ErrorCodes = {
+  NETWORK_ERROR: 'NETWORK_ERROR',
+  AUTHENTICATION_ERROR: 'AUTHENTICATION_ERROR',
+  SERVER_ERROR: 'SERVER_ERROR',
+  NOT_FOUND: 'NOT_FOUND',
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  UNKNOWN_ERROR: 'UNKNOWN_ERROR',
+  FAMILY_ACCESS_DENIED: 'FAMILY_ACCESS_DENIED'
+};
 
 // Key for storing liked posts
 const LIKED_POSTS_KEY = 'liked_posts_v2';
@@ -14,59 +37,81 @@ const getSelectedFamilyId = async () => {
     return null;
   }
 };
-export const createPost = async (familyId, data) => {
-  // If no family ID passed, try to get from storage
-  if (!familyId) {
-    familyId = await getSelectedFamilyId();
-    
-    if (!familyId) {
-      throw new Error('No family ID provided and no selected family found in storage');
-    }
-  }
-  
-  try {
-    console.log(`Creating post for family ${familyId}:`, data);
-    
-    const formData = new FormData();
-    formData.append('caption', data.caption);
-    formData.append('familyId', familyId);
-    
-    if (data.media) {
-      console.log('Adding media to post:', {
-        uri: data.media.uri,
-        type: data.media.type || 'image/jpeg',
-        name: data.media.fileName || `photo-${Date.now()}.jpg`
-      });
-      
-      formData.append('media', {
-        uri: data.media.uri,
-        name: data.media.fileName || `photo-${Date.now()}.jpg`,
-        type: data.media.type || 'image/jpeg'
-      });
-    }
-    
-    const response = await apiClient.post(`/api/family/${familyId}/posts`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      // Increase timeout for media upload
-      timeout: 60000 // 60 seconds
-    });
 
-    return response.data;
-  } catch (error) {
-    console.error('Error creating post:', error);
+// Helper function to standardize error handling
+const handleApiError = (error, customMessage = 'An error occurred') => {
+  // Log detailed error information for debugging
+  console.error('API Error Details:', {
+    message: error.message,
+    endpoint: error.config?.url,
+    status: error.response?.status,
+    data: error.response?.data,
+    stack: error.stack
+  });
+
+  // Determine error type and create appropriate error object
+  if (!error.response) {
+    // Network error (no response from server)
+    return new FeedServiceError(
+      'Network connection issue. Please check your internet connection.',
+      ErrorCodes.NETWORK_ERROR,
+      error
+    );
+  }
+
+  const status = error.response.status;
+  const errorData = error.response.data;
+
+  // Handle different error types based on status code
+  switch (status) {
+    case 401:
+    case 403:
+      // Check for family access denied errors
+      if (errorData?.error?.includes('not a member of this family')) {
+        return new FeedServiceError(
+          'You do not have access to this family.',
+          ErrorCodes.FAMILY_ACCESS_DENIED,
+          error
+        );
+      }
+      return new FeedServiceError(
+        'Authentication error. Please log in again.',
+        ErrorCodes.AUTHENTICATION_ERROR,
+        error
+      );
     
-    if (error.response) {
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-    }
+    case 404:
+      return new FeedServiceError(
+        'The requested resource was not found.',
+        ErrorCodes.NOT_FOUND,
+        error
+      );
     
-    throw error;
+    case 422:
+      return new FeedServiceError(
+        errorData?.error || 'Validation error. Please check your input.',
+        ErrorCodes.VALIDATION_ERROR,
+        error
+      );
+    
+    case 500:
+    case 502:
+    case 503:
+    case 504:
+      return new FeedServiceError(
+        'Server error. Please try again later.',
+        ErrorCodes.SERVER_ERROR,
+        error
+      );
+    
+    default:
+      return new FeedServiceError(
+        errorData?.error || customMessage,
+        ErrorCodes.UNKNOWN_ERROR,
+        error
+      );
   }
 };
-
-
 
 // Function to get the map of liked posts from storage
 const getLikedPostsMap = async () => {
@@ -84,6 +129,11 @@ const getLikedPostsMap = async () => {
 // Function to save a post's liked state
 const saveLikedState = async (postId, isLiked) => {
   try {
+    if (!postId) {
+      console.warn('Attempted to save like state for undefined postId');
+      return false;
+    }
+
     const likedPosts = await getLikedPostsMap();
     
     if (isLiked) {
@@ -93,7 +143,7 @@ const saveLikedState = async (postId, isLiked) => {
     }
     
     await SecureStore.setItemAsync(LIKED_POSTS_KEY, JSON.stringify(likedPosts));
-    console.log('Saved like state:', { postId, isLiked, likedPosts });
+    console.log('Saved like state:', { postId, isLiked });
     return true;
   } catch (error) {
     console.error('Error saving liked state:', error);
@@ -101,12 +151,86 @@ const saveLikedState = async (postId, isLiked) => {
   }
 };
 
+export const createPost = async (familyId, data) => {
+  // If no family ID passed, try to get from storage
+  if (!familyId) {
+    try {
+      familyId = await getSelectedFamilyId();
+      
+      if (!familyId) {
+        throw new FeedServiceError(
+          'No family selected. Please select a family first.',
+          ErrorCodes.VALIDATION_ERROR
+        );
+      }
+    } catch (error) {
+      throw handleApiError(error, 'Failed to determine family ID');
+    }
+  }
+  
+  try {
+    console.log(`Creating post for family ${familyId}`);
+    
+    // Validate data before sending
+    if (!data || (!data.caption && !data.media)) {
+      throw new FeedServiceError(
+        'Post must contain text or media',
+        ErrorCodes.VALIDATION_ERROR
+      );
+    }
+    
+    const formData = new FormData();
+    formData.append('caption', data.caption || '');
+    formData.append('familyId', familyId);
+    
+    if (data.media) {
+      console.log('Adding media to post');
+      
+      // Validate media object before appending
+      if (!data.media.uri) {
+        throw new FeedServiceError(
+          'Media must have a valid URI',
+          ErrorCodes.VALIDATION_ERROR
+        );
+      }
+      
+      formData.append('media', {
+        uri: data.media.uri,
+        name: data.media.fileName || `photo-${Date.now()}.jpg`,
+        type: data.media.type || 'image/jpeg'
+      });
+    }
+    
+    // Set a longer timeout for uploads
+    const response = await apiClient.post(`/api/family/${familyId}/posts`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 60000 // 60 seconds timeout for media upload
+    });
+
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to create post');
+  }
+};
+
 export const getFamilyPosts = async (familyId, page = 1) => {
   if (!familyId) {
-    familyId = await getSelectedFamilyId();
-    
-    if (!familyId) {
-      throw new Error('No family ID provided and no selected family found in storage');
+    try {
+      familyId = await getSelectedFamilyId();
+      
+      if (!familyId) {
+        throw new FeedServiceError(
+          'No family selected. Please select a family first.',
+          ErrorCodes.VALIDATION_ERROR
+        );
+      }
+    } catch (error) {
+      if (error instanceof FeedServiceError) {
+        throw error;
+      }
+      throw handleApiError(error, 'Failed to determine family ID');
     }
   }
   
@@ -131,11 +255,15 @@ export const getFamilyPosts = async (familyId, page = 1) => {
 
     // Get our local like state
     const likedPostsMap = await getLikedPostsMap();
-    console.log('Local liked posts:', likedPostsMap);
     
     // Process each post to ensure it has the correct like state
     const posts = response.data.posts || response.data || [];
     const processedPosts = posts.map(post => {
+      if (!post || !post.post_id) {
+        console.warn('Received invalid post data:', post);
+        return null;
+      }
+      
       // Get post ID as string for consistency
       const postId = post.post_id.toString();
       
@@ -150,7 +278,7 @@ export const getFamilyPosts = async (familyId, page = 1) => {
         likes_count: parseInt(post.likes_count || 0, 10),
         comments_count: parseInt(post.comments_count || 0, 10)
       };
-    });
+    }).filter(Boolean); // Remove any null entries
     
     return {
       posts: processedPosts,
@@ -159,12 +287,18 @@ export const getFamilyPosts = async (familyId, page = 1) => {
       totalPosts: response.data.totalPosts || processedPosts.length
     };
   } catch (error) {
-    console.error('Error in getFamilyPosts:', error);
-    throw error;
+    throw handleApiError(error, 'Failed to load posts');
   }
 };
 
 export const toggleLike = async (postId) => {
+  if (!postId) {
+    throw new FeedServiceError(
+      'Post ID is required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
   try {
     console.log(`Toggling like for post ${postId}`);
     
@@ -188,22 +322,56 @@ export const toggleLike = async (postId) => {
       likes_count: likesCount
     };
   } catch (error) {
-    console.error('Error toggling like:', error);
-    throw error;
+    // If network error, try to update local state anyway to preserve user action
+    if (!error.response) {
+      const currentLikedState = (await getLikedPostsMap())[postId.toString()];
+      const newLikedState = !currentLikedState;
+      
+      // Update local state
+      await saveLikedState(postId, newLikedState);
+      
+      throw new FeedServiceError(
+        'Network issue. Like was saved locally and will sync when connection is restored.',
+        ErrorCodes.NETWORK_ERROR,
+        error
+      );
+    }
+    
+    throw handleApiError(error, 'Failed to toggle like');
   }
 };
 
 export const getComments = async (postId) => {
+  if (!postId) {
+    throw new FeedServiceError(
+      'Post ID is required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
   try {
     const response = await apiClient.get(`/api/posts/${postId}/comments`);
-    return response.data;
+    return response.data || [];
   } catch (error) {
-    console.error('Error fetching comments:', error);
-    throw error;
+    throw handleApiError(error, 'Failed to load comments');
   }
 };
 
 export const addComment = async (postId, text, parentCommentId = null) => {
+  if (!postId) {
+    throw new FeedServiceError(
+      'Post ID is required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
+  if (!text || text.trim() === '') {
+    throw new FeedServiceError(
+      'Comment text is required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
   try {
     const payload = { text };
     
@@ -214,23 +382,35 @@ export const addComment = async (postId, text, parentCommentId = null) => {
     const response = await apiClient.post(`/api/posts/${postId}/comment`, payload);
     return response.data;
   } catch (error) {
-    console.error('Error adding comment:', error);
-    throw error;
+    throw handleApiError(error, 'Failed to add comment');
   }
 };
 
 export const deleteComment = async (postId, commentId) => {
+  if (!postId || !commentId) {
+    throw new FeedServiceError(
+      'Post ID and Comment ID are required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
   try {
     console.log(`Deleting comment ${commentId} from post ${postId}`);
     const response = await apiClient.delete(`/api/posts/${postId}/comments/${commentId}`);
     return response.data;
   } catch (error) {
-    console.error('Error deleting comment:', error);
-    throw error;
+    throw handleApiError(error, 'Failed to delete comment');
   }
 };
 
 export const deletePost = async (postId) => {
+  if (!postId) {
+    throw new FeedServiceError(
+      'Post ID is required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
   try {
     console.log(`Deleting post ${postId}`);
     const response = await apiClient.delete(`/api/posts/${postId}`);
@@ -244,7 +424,12 @@ export const deletePost = async (postId) => {
     
     return response.data;
   } catch (error) {
-    console.error('Error deleting post:', error);
-    throw error;
+    throw handleApiError(error, 'Failed to delete post');
   }
+};
+
+// Export error types for consumers of this service
+export const Errors = {
+  FeedServiceError,
+  ErrorCodes
 };
