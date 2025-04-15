@@ -14,9 +14,6 @@ import { authEvents } from '../app/api/client';
 // Create context
 export const AuthContext = createContext(null);
 
-/**
- * Authentication Provider component that manages auth state
- */
 export const AuthProvider = ({ children }) => {
   // State
   const [user, setUser] = useState(null);

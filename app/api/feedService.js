@@ -1,8 +1,6 @@
 // app/api/feedService.js
-
 import apiClient from './client';
 import * as SecureStore from 'expo-secure-store';
-import { Alert } from 'react-native';
 
 // Custom error class for API-specific errors
 class FeedServiceError extends Error {
@@ -33,25 +31,13 @@ const getSelectedFamilyId = async () => {
   try {
     return await SecureStore.getItemAsync('selected_family_id');
   } catch (error) {
-    console.error('Error getting selected family ID from storage:', error);
     return null;
   }
 };
 
 // Helper function to standardize error handling
 const handleApiError = (error, customMessage = 'An error occurred') => {
-  // Log detailed error information for debugging
-  console.error('API Error Details:', {
-    message: error.message,
-    endpoint: error.config?.url,
-    status: error.response?.status,
-    data: error.response?.data,
-    stack: error.stack
-  });
-
-  // Determine error type and create appropriate error object
   if (!error.response) {
-    // Network error (no response from server)
     return new FeedServiceError(
       'Network connection issue. Please check your internet connection.',
       ErrorCodes.NETWORK_ERROR,
@@ -66,7 +52,6 @@ const handleApiError = (error, customMessage = 'An error occurred') => {
   switch (status) {
     case 401:
     case 403:
-      // Check for family access denied errors
       if (errorData?.error?.includes('not a member of this family')) {
         return new FeedServiceError(
           'You do not have access to this family.',
@@ -121,7 +106,7 @@ const getLikedPostsMap = async () => {
       return JSON.parse(likedPostsJson);
     }
   } catch (error) {
-    console.error('Error getting liked posts from storage:', error);
+    // Silent fail, return empty object
   }
   return {};
 };
@@ -129,10 +114,7 @@ const getLikedPostsMap = async () => {
 // Function to save a post's liked state
 const saveLikedState = async (postId, isLiked) => {
   try {
-    if (!postId) {
-      console.warn('Attempted to save like state for undefined postId');
-      return false;
-    }
+    if (!postId) return false;
 
     const likedPosts = await getLikedPostsMap();
     
@@ -143,10 +125,8 @@ const saveLikedState = async (postId, isLiked) => {
     }
     
     await SecureStore.setItemAsync(LIKED_POSTS_KEY, JSON.stringify(likedPosts));
-    console.log('Saved like state:', { postId, isLiked });
     return true;
   } catch (error) {
-    console.error('Error saving liked state:', error);
     return false;
   }
 };
@@ -169,8 +149,6 @@ export const createPost = async (familyId, data) => {
   }
   
   try {
-    console.log(`Creating post for family ${familyId}`);
-    
     // Validate data before sending
     if (!data || (!data.caption && !data.mediaItems && !data.media)) {
       throw new FeedServiceError(
@@ -185,8 +163,6 @@ export const createPost = async (familyId, data) => {
     
     // Handle multiple media items
     if (data.mediaItems && data.mediaItems.length > 0) {
-      console.log(`Adding ${data.mediaItems.length} media items to post`);
-      
       // Send all media items as an array under the 'media' key
       data.mediaItems.forEach((mediaItem, index) => {
         if (!mediaItem.uri) {
@@ -205,8 +181,6 @@ export const createPost = async (familyId, data) => {
     }
     // Legacy single media support
     else if (data.media) {
-      console.log('Adding single media to post');
-      
       if (!data.media.uri) {
         throw new FeedServiceError(
           'Media must have a valid URI',
@@ -255,8 +229,6 @@ export const getFamilyPosts = async (familyId, page = 1) => {
   }
   
   try {
-    console.log(`Fetching family posts for family ${familyId}, page ${page}`);
-    
     // Get the posts from the API
     const response = await apiClient.get(`/api/family/${familyId}/posts`, {
       params: { page },
@@ -264,7 +236,6 @@ export const getFamilyPosts = async (familyId, page = 1) => {
     });
     
     if (!response.data) {
-      console.warn('API returned empty response data');
       return { 
         posts: [], 
         currentPage: page, 
@@ -279,10 +250,7 @@ export const getFamilyPosts = async (familyId, page = 1) => {
     // Process each post to ensure it has the correct like state
     const posts = response.data.posts || response.data || [];
     const processedPosts = posts.map(post => {
-      if (!post || !post.post_id) {
-        console.warn('Received invalid post data:', post);
-        return null;
-      }
+      if (!post || !post.post_id) return null;
       
       // Get post ID as string for consistency
       const postId = post.post_id.toString();
@@ -320,8 +288,6 @@ export const toggleLike = async (postId) => {
   }
   
   try {
-    console.log(`Toggling like for post ${postId}`);
-    
     // Make the API call to toggle like
     const response = await apiClient.post(`/api/posts/${postId}/like`);
     
@@ -415,7 +381,6 @@ export const deleteComment = async (postId, commentId) => {
   }
   
   try {
-    console.log(`Deleting comment ${commentId} from post ${postId}`);
     const response = await apiClient.delete(`/api/posts/${postId}/comments/${commentId}`);
     return response.data;
   } catch (error) {
@@ -432,7 +397,6 @@ export const deletePost = async (postId) => {
   }
   
   try {
-    console.log(`Deleting post ${postId}`);
     const response = await apiClient.delete(`/api/posts/${postId}`);
     
     // Also remove from liked posts storage
