@@ -9,7 +9,10 @@ import {
   Dimensions, 
   SafeAreaView,
   StatusBar,
-  Animated
+  Animated,
+  Platform,
+  FlatList,
+  Text
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Video } from 'expo-av';
@@ -17,12 +20,33 @@ import * as Haptics from 'expo-haptics';
 
 const { width, height } = Dimensions.get('window');
 
-export default function MediaViewer({ visible, media, onClose }) {
+export default function MediaViewer({ visible, media, initialIndex = 0, onClose }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const flatListRef = useRef(null);
   const videoRef = useRef(null);
 
+  // Reset to initial index when modal opens
+  React.useEffect(() => {
+    if (visible) {
+      setCurrentIndex(initialIndex);
+      // Wait for modal to be visible before scrolling
+      setTimeout(() => {
+        flatListRef.current?.scrollToIndex({
+          index: initialIndex,
+          animated: false
+        });
+      }, 100);
+    }
+  }, [visible, initialIndex]);
+
   const handleClose = () => {
+    // Stop video if playing
+    if (videoRef.current) {
+      videoRef.current.stopAsync();
+    }
+    
     // Play haptic feedback when closing the viewer
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
@@ -45,14 +69,12 @@ export default function MediaViewer({ visible, media, onClose }) {
     }
   }, [visible, fadeAnim]);
 
-  const renderContent = () => {
-    if (!media) return null;
-
-    if (media.type === 'video' || media.url?.endsWith('.mp4')) {
+  const renderItem = ({ item, index }) => {
+    if (item.type === 'video' || item.url?.endsWith('.mp4')) {
       return (
         <TouchableOpacity 
           activeOpacity={1} 
-          style={styles.videoContainer}
+          style={styles.mediaContainer}
           onPress={() => {
             if (videoRef.current) {
               if (isPlaying) {
@@ -65,13 +87,17 @@ export default function MediaViewer({ visible, media, onClose }) {
           }}
         >
           <Video
-            ref={videoRef}
-            source={{ uri: media.url }}
-            style={styles.video}
+            ref={index === currentIndex ? videoRef : null}
+            source={{ uri: item.url }}
+            style={styles.media}
             resizeMode="contain"
             shouldPlay={false}
             isLooping={true}
-            onPlaybackStatusUpdate={status => setIsPlaying(status.isPlaying)}
+            onPlaybackStatusUpdate={status => {
+              if (index === currentIndex) {
+                setIsPlaying(status.isPlaying);
+              }
+            }}
           />
           {!isPlaying && (
             <View style={styles.playButtonContainer}>
@@ -85,12 +111,28 @@ export default function MediaViewer({ visible, media, onClose }) {
     // Default to image
     return (
       <Image
-        source={{ uri: media.url }}
-        style={styles.image}
+        source={{ uri: item.url }}
+        style={styles.media}
         resizeMode="contain"
       />
     );
   };
+
+  // Handle scroll end to update current index
+  const handleScrollEnd = (e) => {
+    const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (newIndex !== currentIndex) {
+      setCurrentIndex(newIndex);
+      // Stop video if playing when scrolling away
+      if (videoRef.current) {
+        videoRef.current.stopAsync();
+        setIsPlaying(false);
+      }
+      Haptics.selectionAsync();
+    }
+  };
+
+  if (!Array.isArray(media)) return null;
 
   return (
     <Modal
@@ -107,17 +149,38 @@ export default function MediaViewer({ visible, media, onClose }) {
         ]}
       >
         <SafeAreaView style={styles.safeArea}>
-          <TouchableOpacity 
-            style={styles.closeButton} 
-            onPress={handleClose}
-            hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-          >
-            <Ionicons name="close" size={28} color="#FFFFFF" />
-          </TouchableOpacity>
-          
-          <View style={styles.contentContainer}>
-            {renderContent()}
+          <View style={styles.header}>
+            <TouchableOpacity 
+              style={styles.closeButton} 
+              onPress={handleClose}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+            >
+              <Ionicons name="close" size={28} color="#FFFFFF" />
+            </TouchableOpacity>
+            
+            <View style={styles.mediaCounter}>
+              <Text style={styles.mediaCounterText}>
+                {currentIndex + 1} / {media.length}
+              </Text>
+            </View>
           </View>
+          
+          <FlatList
+            ref={flatListRef}
+            data={media}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            initialScrollIndex={initialIndex}
+            getItemLayout={(data, index) => ({
+              length: width,
+              offset: width * index,
+              index,
+            })}
+            onMomentumScrollEnd={handleScrollEnd}
+            renderItem={renderItem}
+            keyExtractor={(item, index) => `media-${index}`}
+          />
         </SafeAreaView>
       </Animated.View>
     </Modal>
@@ -127,16 +190,24 @@ export default function MediaViewer({ visible, media, onClose }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
   },
   safeArea: {
     flex: 1,
   },
-  closeButton: {
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
     position: 'absolute',
-    top: 16,
-    right: 16,
+    top: 0,
+    left: 0,
+    right: 0,
     zIndex: 10,
+  },
+  closeButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -144,24 +215,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  contentContainer: {
-    flex: 1,
+  mediaCounter: {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  mediaCounterText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  mediaContainer: {
+    width,
+    height: height,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  image: {
-    width,
-    height: height * 0.8,
-  },
-  videoContainer: {
-    width,
-    height: height * 0.8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  video: {
-    width: '100%',
-    height: '100%',
+  media: {
+    width: width * 0.98,
+    height: height * 0.85,
+    alignSelf: 'center',
+    resizeMode: 'contain',
+    borderRadius: 18,
+    backgroundColor: '#000',
   },
   playButtonContainer: {
     ...StyleSheet.absoluteFillObject,

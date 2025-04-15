@@ -1,4 +1,4 @@
-// app/components/CreatePostForm.js
+// app/components/CreatePostForm.js - Fixed version for multiple uploads
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
@@ -10,7 +10,9 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
-  Pressable
+  Pressable,
+  ScrollView,
+  FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -23,11 +25,14 @@ import * as FileSystem from 'expo-file-system';
 
 export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
   const [caption, setCaption] = useState('');
-  const [media, setMedia] = useState(null);
+  const [mediaItems, setMediaItems] = useState([]); // Array of media items instead of single media
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showMediaOptions, setShowMediaOptions] = useState(false);
   const [youtubePreview, setYoutubePreview] = useState(null);
   const videoRef = useRef(null);
+
+  // Max number of media items allowed
+  const MAX_MEDIA_ITEMS = 4;
 
   // Check caption for YouTube links on change
   useEffect(() => {
@@ -73,32 +78,59 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
     return (match && match[2].length === 11) ? match[2] : null;
   };
 
-  const pickImage = async () => {
+  const pickImages = async () => {
+    // Check if we can add more images
+    if (mediaItems.length >= MAX_MEDIA_ITEMS) {
+      Alert.alert('Maximum Reached', `You can only add up to ${MAX_MEDIA_ITEMS} media items.`);
+      return;
+    }
+
     try {
+      // Calculate how many more images we can add
+      const remainingSlots = MAX_MEDIA_ITEMS - mediaItems.length;
+      
+      // Use MediaTypeOptions.All instead of Images to match the deprecated enum
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
+        allowsMultipleSelection: true,
+        selectionLimit: remainingSlots,
         quality: 0.8,
       });
 
-      if (!result.canceled) {
-        setMedia({
-          uri: result.assets[0].uri,
-          type: 'image/jpeg', // Assuming JPEG format
-          fileName: result.assets[0].uri.split('/').pop(),
-          isVideo: false
-        });
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Convert selected assets to media items
+        const newMediaItems = result.assets.map(asset => ({
+          uri: asset.uri,
+          type: asset.mimeType || 'image/jpeg',
+          fileName: asset.uri.split('/').pop(),
+          isVideo: false,
+          width: asset.width,
+          height: asset.height
+        }));
+        
+        // Add new items to existing media array
+        setMediaItems([...mediaItems, ...newMediaItems].slice(0, MAX_MEDIA_ITEMS));
         setShowMediaOptions(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        // Show warning if some items were not added due to limit
+        if (result.assets.length > remainingSlots) {
+          Alert.alert('Maximum Reached', `Only ${remainingSlots} out of ${result.assets.length} selected images were added.`);
+        }
       }
     } catch (error) {
-      console.error('Error picking image:', error);
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      console.error('Error picking images:', error);
+      Alert.alert('Error', 'Failed to pick images. Please try again.');
     }
   };
 
   const pickVideo = async () => {
+    // Check if we can add a video
+    if (mediaItems.length >= MAX_MEDIA_ITEMS) {
+      Alert.alert('Maximum Reached', `You can only add up to ${MAX_MEDIA_ITEMS} media items.`);
+      return;
+    }
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Videos,
@@ -108,7 +140,7 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
         videoMaxDuration: 60, // Limit videos to 60 seconds
       });
 
-      if (!result.canceled) {
+      if (!result.canceled && result.assets && result.assets.length > 0) {
         // Check video duration if possible
         if (result.assets[0].duration && result.assets[0].duration > 60000) {
           Alert.alert('Video Too Long', 'Please select a video shorter than 60 seconds');
@@ -117,7 +149,6 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
 
         // Get file info to determine correct MIME type
         const fileInfo = await FileSystem.getInfoAsync(result.assets[0].uri);
-        console.log("Video file info:", fileInfo);
         
         // Determine video mime type based on extension or default to mp4
         let videoType = 'video/mp4';
@@ -125,30 +156,32 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
         if (fileExt === 'mov') videoType = 'video/quicktime';
         else if (fileExt === 'avi') videoType = 'video/x-msvideo';
         else if (fileExt === 'wmv') videoType = 'video/x-ms-wmv';
-        
-        console.log(`Selected video with type: ${videoType}, extension: ${fileExt}`);
 
-        setMedia({
+        const newVideo = {
           uri: result.assets[0].uri,
           type: videoType,
           fileName: `video_${Date.now()}.${fileExt || 'mp4'}`,
-          isVideo: true
-        });
+          isVideo: true,
+          width: result.assets[0].width,
+          height: result.assets[0].height
+        };
+        
+        // Add video to media items
+        setMediaItems([...mediaItems, newVideo]);
         setShowMediaOptions(false);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        // Log details for debugging
-        console.log("Video selected:", {
-          uri: result.assets[0].uri,
-          type: videoType,
-          fileName: `video_${Date.now()}.${fileExt || 'mp4'}`,
-          size: fileInfo.size
-        });
       }
     } catch (error) {
       console.error('Error picking video:', error);
       Alert.alert('Error', 'Failed to pick video. Please try again.');
     }
+  };
+
+  const removeMediaItem = (index) => {
+    const updatedMedia = [...mediaItems];
+    updatedMedia.splice(index, 1);
+    setMediaItems(updatedMedia);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const toggleMediaOptions = () => {
@@ -157,36 +190,27 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
   };
 
   const handleSubmit = async () => {
-    if (!caption.trim() && !media && !youtubePreview) {
+    if (!caption.trim() && mediaItems.length === 0 && !youtubePreview) {
       Alert.alert('Error', 'Please add a caption, media, or link to your post');
       return;
     }
 
     setIsSubmitting(true);
     try {
-      // If we're posting a YouTube link, make sure the full URL is in the caption
-      // This ensures the backend can detect and process it correctly
-      let finalCaption = caption;
+      console.log("Submitting post with media items:", mediaItems.length);
       
-      // Don't include any modifications for submission - let the backend handle it
-      // The full URL is needed for proper link preview generation
-
-      console.log("Submitting post with media:", media);
-      
+      // Send all media items to the API
       const result = await createPost(familyId, { 
-        caption: finalCaption, 
-        media,
-        mediaType: media ? (media.isVideo ? 'video' : 'image') : null 
+        caption,
+        mediaItems: mediaItems.length > 0 ? mediaItems : null
       });
-      
-      console.log("Post creation response:", result);
       
       onPostCreated();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
       // Reset form
       setCaption('');
-      setMedia(null);
+      setMediaItems([]);
       setYoutubePreview(null);
     } catch (error) {
       console.error('Error creating post:', error);
@@ -213,33 +237,54 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
   };
 
   const renderMediaPreview = () => {
-    if (!media) return null;
+    if (mediaItems.length === 0) return null;
 
     return (
-      <View style={styles.mediaPreview}>
-        {media.isVideo ? (
-          <Video
-            ref={videoRef}
-            source={{ uri: media.uri }}
-            style={styles.previewVideo}
-            useNativeControls
-            resizeMode="cover"
-            isLooping={false}
-            isMuted={false}
-            shouldPlay={false}
-          />
-        ) : (
-          <Image source={{ uri: media.uri }} style={styles.previewImage} />
+      <View style={styles.mediaPreviewContainer}>
+        <FlatList
+          data={mediaItems}
+          horizontal={mediaItems.length > 1}
+          showsHorizontalScrollIndicator={true}
+          keyExtractor={(item, index) => `media-${index}`}
+          renderItem={({ item, index }) => (
+            <View style={[
+              styles.mediaPreview,
+              mediaItems.length === 1 ? styles.singleMediaPreview : styles.multipleMediaPreview
+            ]}>
+              {item.isVideo ? (
+                <Video
+                  source={{ uri: item.uri }}
+                  style={mediaItems.length === 1 ? styles.singlePreviewVideo : styles.multiplePreviewVideo}
+                  useNativeControls
+                  resizeMode="cover"
+                  isLooping={false}
+                  isMuted={true}
+                  shouldPlay={false}
+                />
+              ) : (
+                <Image 
+                  source={{ uri: item.uri }} 
+                  style={mediaItems.length === 1 ? styles.singlePreviewImage : styles.multiplePreviewImage} 
+                  resizeMode="cover"
+                />
+              )}
+              <TouchableOpacity 
+                style={styles.removeMediaButton}
+                onPress={() => removeMediaItem(index)}
+              >
+                <Ionicons name="close-circle-sharp" size={24} color="#FF453A" />
+              </TouchableOpacity>
+            </View>
+          )}
+          contentContainerStyle={mediaItems.length > 1 ? styles.mediaPreviewList : null}
+        />
+        
+        {/* Show count indicator if multiple media items */}
+        {mediaItems.length > 1 && (
+          <View style={styles.mediaCountContainer}>
+            <Text style={styles.mediaCountText}>{mediaItems.length} / {MAX_MEDIA_ITEMS}</Text>
+          </View>
         )}
-        <TouchableOpacity 
-          style={styles.removeMediaButton}
-          onPress={() => {
-            setMedia(null);
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          }}
-        >
-          <Ionicons name="close-circle-sharp" size={24} color="#FF453A" />
-        </TouchableOpacity>
       </View>
     );
   };
@@ -302,11 +347,11 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
         <View style={styles.mediaOptionsContainer}>
           <Pressable 
             style={styles.mediaOptionButton}
-            onPress={pickImage}
+            onPress={pickImages}
             android_ripple={{ color: 'rgba(59, 175, 188, 0.2)' }}
           >
-            <Ionicons name="image-outline" size={24} color="#3BAFBC" />
-            <Text style={styles.mediaOptionText}>Photo</Text>
+            <Ionicons name="images-outline" size={24} color="#3BAFBC" />
+            <Text style={styles.mediaOptionText}>Photos</Text>
           </Pressable>
           
           <Pressable 
@@ -325,14 +370,20 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
           <TouchableOpacity 
             style={[
               styles.mediaButton,
-              showMediaOptions && styles.mediaButtonActive
+              showMediaOptions && styles.mediaButtonActive,
+              mediaItems.length >= MAX_MEDIA_ITEMS && styles.mediaButtonDisabled
             ]}
             onPress={toggleMediaOptions}
-            disabled={isSubmitting}
+            disabled={isSubmitting || mediaItems.length >= MAX_MEDIA_ITEMS}
             activeOpacity={0.7}
           >
-            <Ionicons name="add-circle-outline" size={20} color="#3BAFBC" />
-            <Text style={styles.mediaButtonText}>Add Media</Text>
+            <Ionicons name="add-circle-outline" size={20} color={mediaItems.length >= MAX_MEDIA_ITEMS ? "#8E8E93" : "#3BAFBC"} />
+            <Text style={[
+              styles.mediaButtonText,
+              mediaItems.length >= MAX_MEDIA_ITEMS && styles.mediaButtonTextDisabled
+            ]}>
+              {mediaItems.length === 0 ? "Add Media" : `Add More (${mediaItems.length}/${MAX_MEDIA_ITEMS})`}
+            </Text>
           </TouchableOpacity>
         </View>
         
@@ -349,11 +400,11 @@ export default function CreatePostForm({ familyId, onPostCreated, onCancel }) {
           <TouchableOpacity 
             style={styles.postButtonContainer}
             onPress={handleSubmit}
-            disabled={(!caption.trim() && !media && !youtubePreview) || isSubmitting}
+            disabled={(!caption.trim() && mediaItems.length === 0 && !youtubePreview) || isSubmitting}
             activeOpacity={0.8}
           >
             <LinearGradient
-              colors={(!caption.trim() && !media && !youtubePreview) || isSubmitting ? 
+              colors={(!caption.trim() && mediaItems.length === 0 && !youtubePreview) || isSubmitting ? 
                 ['rgba(30, 43, 47, 0.5)', 'rgba(59, 175, 188, 0.5)'] : 
                 ['#1E2B2F', '#3BAFBC']}
               start={{ x: 0, y: 0 }}
@@ -396,10 +447,15 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2, // Apple-style tight letter spacing
     zIndex: 1, // Ensure input is above the BlurView
   },
+  mediaPreviewContainer: {
+    marginBottom: 16,
+    zIndex: 1,
+  },
+  mediaPreviewList: {
+    paddingRight: 16,
+  },
   mediaPreview: {
     position: 'relative',
-    marginBottom: 16,
-    zIndex: 1, // Ensure preview is above the BlurView
     borderRadius: 12,
     overflow: 'hidden',
     shadowColor: '#000',
@@ -408,33 +464,65 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  previewImage: {
+  singleMediaPreview: {
     width: '100%',
-    height: 200,
-    backgroundColor: '#1E2B2F', // Midnight Green for image placeholder
+    marginBottom: 8,
   },
-  previewVideo: {
+  multipleMediaPreview: {
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  singlePreviewImage: {
     width: '100%',
     height: 200,
-    backgroundColor: '#1E2B2F', // Midnight Green for video placeholder
+    backgroundColor: '#1E2B2F',
+  },
+  multiplePreviewImage: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#1E2B2F',
+  },
+  singlePreviewVideo: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#1E2B2F',
+  },
+  multiplePreviewVideo: {
+    width: 150,
+    height: 150,
+    backgroundColor: '#1E2B2F',
   },
   removeMediaButton: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: 'rgba(18, 18, 18, 0.7)', // Onyx Black with opacity
+    backgroundColor: 'rgba(18, 18, 18, 0.7)',
     borderRadius: 12,
     padding: 2,
+  },
+  mediaCountContainer: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(18, 18, 18, 0.7)',
+    borderRadius: 12,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    marginTop: 8,
+  },
+  mediaCountText: {
+    color: '#F5F5F7',
+    fontSize: 12,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   mediaOptionsContainer: {
     flexDirection: 'row',
     marginBottom: 16,
     zIndex: 1,
-    backgroundColor: 'rgba(18, 18, 18, 0.8)', // Subtle dark background
+    backgroundColor: 'rgba(18, 18, 18, 0.8)',
     borderRadius: 12,
     padding: 8,
     borderWidth: 1,
-    borderColor: 'rgba(59, 175, 188, 0.15)', // Subtle Teal Glow border
+    borderColor: 'rgba(59, 175, 188, 0.15)',
   },
   mediaOptionButton: {
     flexDirection: 'row',
@@ -446,26 +534,26 @@ const styles = StyleSheet.create({
   },
   mediaOptionText: {
     fontSize: 15,
-    color: '#3BAFBC', // Teal Glow
+    color: '#3BAFBC',
     marginLeft: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     fontWeight: '500',
-    letterSpacing: -0.2, // Apple-style tight letter spacing
+    letterSpacing: -0.2,
   },
   // YouTube preview styles
   youtubePreview: {
     marginBottom: 16,
     borderRadius: 12,
     overflow: 'hidden',
-    backgroundColor: '#1E2B2F', // Midnight Green
+    backgroundColor: '#1E2B2F',
     borderWidth: 1,
-    borderColor: 'rgba(59, 175, 188, 0.2)', // Subtle Teal Glow border
+    borderColor: 'rgba(59, 175, 188, 0.2)',
     zIndex: 1,
   },
   youtubeThumbnail: {
     width: '100%',
-    height: 180, // 16:9 aspect ratio approximately
-    backgroundColor: '#121212', // Fallback background
+    height: 180,
+    backgroundColor: '#121212',
   },
   youtubeOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -473,7 +561,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
     zIndex: 2,
-    height: 180, // Match thumbnail height
+    height: 180,
   },
   youtubePlayIcon: {
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
@@ -492,18 +580,18 @@ const styles = StyleSheet.create({
   youtubeLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#F5F5F7', // Soft White
+    color: '#F5F5F7',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   removeYoutubeButton: {
     paddingHorizontal: 10,
     paddingVertical: 4,
-    backgroundColor: 'rgba(255, 69, 58, 0.1)', // Very subtle red
+    backgroundColor: 'rgba(255, 69, 58, 0.1)',
     borderRadius: 4,
   },
   removeYoutubeText: {
     fontSize: 12,
-    color: '#FF453A', // iOS system red
+    color: '#FF453A',
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
@@ -513,8 +601,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(59, 175, 188, 0.1)', // Very subtle Teal Glow border
-    zIndex: 1, // Ensure actions are above the BlurView
+    borderTopColor: 'rgba(59, 175, 188, 0.1)',
+    zIndex: 1,
   },
   mediaButtons: {
     flexDirection: 'row',
@@ -526,15 +614,21 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   mediaButtonActive: {
-    backgroundColor: 'rgba(59, 175, 188, 0.1)', // Teal Glow with opacity
+    backgroundColor: 'rgba(59, 175, 188, 0.1)',
+  },
+  mediaButtonDisabled: {
+    opacity: 0.5,
   },
   mediaButtonText: {
     fontSize: 15,
-    color: '#3BAFBC', // Teal Glow
+    color: '#3BAFBC',
     marginLeft: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     fontWeight: '500',
-    letterSpacing: -0.2, // Apple-style tight letter spacing
+    letterSpacing: -0.2,
+  },
+  mediaButtonTextDisabled: {
+    color: '#8E8E93',
   },
   submitButtons: {
     flexDirection: 'row',
@@ -548,10 +642,10 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     fontSize: 15,
-    color: '#8E8E93', // Slate Gray
+    color: '#8E8E93',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     fontWeight: '500',
-    letterSpacing: -0.2, // Apple-style tight letter spacing
+    letterSpacing: -0.2,
   },
   postButtonContainer: {
     borderRadius: 16,
@@ -571,8 +665,8 @@ const styles = StyleSheet.create({
   postButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#F5F5F7', // Soft White for text
+    color: '#F5F5F7',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    letterSpacing: -0.2, // Apple-style tight letter spacing
+    letterSpacing: -0.2,
   },
 });

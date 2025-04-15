@@ -172,7 +172,7 @@ export const createPost = async (familyId, data) => {
     console.log(`Creating post for family ${familyId}`);
     
     // Validate data before sending
-    if (!data || (!data.caption && !data.media)) {
+    if (!data || (!data.caption && !data.mediaItems && !data.media)) {
       throw new FeedServiceError(
         'Post must contain text or media',
         ErrorCodes.VALIDATION_ERROR
@@ -183,10 +183,30 @@ export const createPost = async (familyId, data) => {
     formData.append('caption', data.caption || '');
     formData.append('familyId', familyId);
     
-    if (data.media) {
-      console.log('Adding media to post');
+    // Handle multiple media items
+    if (data.mediaItems && data.mediaItems.length > 0) {
+      console.log(`Adding ${data.mediaItems.length} media items to post`);
       
-      // Validate media object before appending
+      // Send all media items as an array under the 'media' key
+      data.mediaItems.forEach((mediaItem, index) => {
+        if (!mediaItem.uri) {
+          throw new FeedServiceError(
+            `Media item ${index + 1} must have a valid URI`,
+            ErrorCodes.VALIDATION_ERROR
+          );
+        }
+        
+        formData.append('media', {
+          uri: mediaItem.uri,
+          name: mediaItem.fileName || `media-${Date.now()}-${index}.${mediaItem.type.split('/')[1] || 'jpg'}`,
+          type: mediaItem.type || 'image/jpeg'
+        });
+      });
+    }
+    // Legacy single media support
+    else if (data.media) {
+      console.log('Adding single media to post');
+      
       if (!data.media.uri) {
         throw new FeedServiceError(
           'Media must have a valid URI',

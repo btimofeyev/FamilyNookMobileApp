@@ -11,7 +11,8 @@ import {
   Dimensions,
   Platform,
   Linking,
-  Modal
+  Modal,
+  FlatList
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -31,7 +32,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
   const [showComments, setShowComments] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
-  const [mediaItem, setMediaItem] = useState(null);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [heartScale] = useState(new Animated.Value(0));
   const [youtubeVideoId, setYoutubeVideoId] = useState(null);
   const [youtubeModalVisible, setYoutubeModalVisible] = useState(false);
@@ -318,73 +319,175 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
     return (match && match[2].length === 11) ? match[2] : null;
   };
 
-  const handleMediaPress = () => {
-    // Determine media type
-    let mediaType = 'image';
-    let mediaUrl = '';
-    
-    if (post.media_type === 'video') {
-      mediaType = 'video';
-      mediaUrl = post.media_url || post.signed_image_url;
-    } else if (post.media_url) {
-      mediaUrl = post.media_url;
-    } else if (post.signed_image_url) {
-      mediaUrl = post.signed_image_url;
+  // Helper: get all media items from post (supporting legacy and new format)
+  const getPostMediaItems = (post) => {
+    // New posts: array of media URLs
+    if (Array.isArray(post.media_urls) && post.media_urls.length > 0) {
+      // Use media_type to determine type for all, or guess by extension
+      return post.media_urls.map(url => ({
+        url,
+        type: post.media_type || (url.endsWith('.mp4') ? 'video' : 'image'),
+      }));
     }
-    
-    if (mediaUrl) {
-      setMediaItem({
-        type: mediaType,
-        url: mediaUrl
-      });
-      setMediaViewerVisible(true);
+    // Support for older posts
+    if (Array.isArray(post.media_items) && post.media_items.length > 0) {
+      return post.media_items;
     }
+    if (post.media_url || post.signed_image_url) {
+      return [{
+        url: post.signed_image_url || post.media_url,
+        type: post.media_type || 'image',
+      }];
+    }
+    return [];
   };
 
+  // Calculate grid layout based on number of items
+  const getGridLayout = (numItems) => {
+    if (numItems === 1) return { rows: 1, cols: 1 };
+    if (numItems === 2) return { rows: 1, cols: 2 };
+    if (numItems === 3) return { rows: 2, cols: 2 }; // 2x2 grid with one empty space
+    if (numItems === 4) return { rows: 2, cols: 2 };
+    return { rows: 2, cols: 2 }; // Max 4 items shown in grid, rest viewable in MediaViewer
+  };
+
+  // Handle media item click
+  const handleMediaPress = (index) => {
+    setSelectedMediaIndex(index);
+    setMediaViewerVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  // Render the media grid
   const renderPostMedia = () => {
-    if (!post.media_url && !post.signed_image_url) {
-      return null;
-    }
-    
-    const mediaUrl = post.signed_image_url || post.media_url;
-    
-    if (post.media_type === 'video') {
+    const mediaItems = getPostMediaItems(post);
+    if (!mediaItems.length) return null;
+
+    const gridPadding = 40; // matches your margin calculations
+    const gridGutter = 4;   // gutter between items
+    const gridWidth = width - gridPadding;
+    const itemSize = (gridWidth - gridGutter) / 2;
+    const gridItems = mediaItems.slice(0, 4); // Show max 4 items in grid
+    const hasMore = mediaItems.length > 4;
+
+    // SINGLE IMAGE: take full width, large height
+    if (mediaItems.length === 1) {
       return (
-        <TouchableOpacity activeOpacity={0.9} onPress={handleMediaPress}>
-          <View style={styles.videoContainer}>
-            <Video
-              source={{ uri: mediaUrl }}
-              style={styles.video}
-              useNativeControls={false}
-              resizeMode="cover"
-              shouldPlay={false}
-              isMuted={true}
-              posterSource={{ uri: mediaUrl.replace('.mp4', '.jpg') }}
-            />
-            <View style={styles.playIconContainer}>
-              <Ionicons name="play-circle" size={48} color="rgba(255, 255, 255, 0.8)" />
-            </View>
-          </View>
-        </TouchableOpacity>
+        <View style={[styles.mediaGrid, { width: gridWidth, alignSelf: 'center' }]}> 
+          <TouchableOpacity
+            style={{
+              width: gridWidth,
+              height: gridWidth * 0.75, // 4:3 aspect ratio
+              borderRadius: 14,
+              overflow: 'hidden',
+            }}
+            activeOpacity={0.9}
+            onPress={() => handleMediaPress(0)}
+          >
+            {mediaItems[0].type === 'video' || mediaItems[0].url?.endsWith('.mp4') ? (
+              <View style={styles.videoGridItem}>
+                <Video
+                  source={{ uri: mediaItems[0].url }}
+                  style={styles.gridMedia}
+                  resizeMode="cover"
+                  shouldPlay={false}
+                  isMuted={true}
+                />
+                <View style={styles.playIconContainer}>
+                  <Ionicons name="play-circle" size={24} color="rgba(255, 255, 255, 0.8)" />
+                </View>
+              </View>
+            ) : (
+              <Image
+                source={{ uri: mediaItems[0].url }}
+                style={styles.gridMedia}
+                resizeMode="cover"
+              />
+            )}
+          </TouchableOpacity>
+        </View>
       );
     }
+
+    // MULTIPLE IMAGES: current grid logic
+    return (
+      <View style={[styles.mediaGrid, { width: gridWidth, alignSelf: 'center' }]}> 
+        {gridItems.map((item, index) => {
+          const isLastItem = index === 3 && hasMore;
+          return (
+            <TouchableOpacity
+              key={index}
+              style={[
+                styles.gridItem,
+                {
+                  width: itemSize,
+                  height: itemSize,
+                  marginRight: (index % 2 === 0) ? gridGutter : 0, // Right margin except for last in row
+                  marginBottom: (index < 2) ? gridGutter : 0,      // Bottom margin for first row only
+                }
+              ]}
+              activeOpacity={0.9}
+              onPress={() => handleMediaPress(index)}
+            >
+              {item.type === 'video' || item.url?.endsWith('.mp4') ? (
+                <View style={styles.videoGridItem}>
+                  <Video
+                    source={{ uri: item.url }}
+                    style={styles.gridMedia}
+                    resizeMode="cover"
+                    shouldPlay={false}
+                    isMuted={true}
+                  />
+                  <View style={styles.playIconContainer}>
+                    <Ionicons name="play-circle" size={24} color="rgba(255, 255, 255, 0.8)" />
+                  </View>
+                </View>
+              ) : (
+                <Image
+                  source={{ uri: item.url }}
+                  style={styles.gridMedia}
+                  resizeMode="cover"
+                />
+              )}
+              {isLastItem && (
+                <View style={styles.moreOverlay}>
+                  <Text style={styles.moreText}>+{mediaItems.length - 3}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    );
+  };
+
+  const renderLinkPreview = () => {
+    if (!youtubeVideoId) return null;
     
+    // YouTube preview
     return (
       <TouchableOpacity 
-        activeOpacity={0.9} 
-        onPress={handleMediaPress}
-        onLongPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }}
-        delayLongPress={300}
-        onPressIn={() => { lastTap.current = Date.now(); }}
-        onPressOut={() => { handleDoubleTapLike(); }}
+        activeOpacity={0.8}
+        onPress={handleYoutubePress}
+        style={styles.youtubePreviewContainer}
       >
         <Image 
-          source={{ uri: mediaUrl }} 
-          style={styles.image} 
-          resizeMode="cover" 
+          source={{ uri: `https://img.youtube.com/vi/${youtubeVideoId}/0.jpg` }} 
+          style={styles.youtubeThumbnail}
+          resizeMode="cover"
         />
+        <View style={styles.youtubeOverlay}>
+          <View style={styles.youtubePlayButton}>
+            <Ionicons name="logo-youtube" size={30} color="#FF0000" />
+          </View>
+        </View>
+        {post.link_preview && post.link_preview.title && (
+          <View style={styles.youtubeTitleContainer}>
+            <Text style={styles.youtubeTitle} numberOfLines={2}>
+              {post.link_preview.title}
+            </Text>
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -454,37 +557,6 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
           </BlurView>
         </View>
       </Modal>
-    );
-  };
-
-  const renderLinkPreview = () => {
-    if (!youtubeVideoId) return null;
-    
-    // YouTube preview
-    return (
-      <TouchableOpacity 
-        activeOpacity={0.8}
-        onPress={handleYoutubePress}
-        style={styles.youtubePreviewContainer}
-      >
-        <Image 
-          source={{ uri: `https://img.youtube.com/vi/${youtubeVideoId}/0.jpg` }} 
-          style={styles.youtubeThumbnail}
-          resizeMode="cover"
-        />
-        <View style={styles.youtubeOverlay}>
-          <View style={styles.youtubePlayButton}>
-            <Ionicons name="logo-youtube" size={30} color="#FF0000" />
-          </View>
-        </View>
-        {post.link_preview && post.link_preview.title && (
-          <View style={styles.youtubeTitleContainer}>
-            <Text style={styles.youtubeTitle} numberOfLines={2}>
-              {post.link_preview.title}
-            </Text>
-          </View>
-        )}
-      </TouchableOpacity>
     );
   };
 
@@ -582,9 +654,13 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
       )}
       
       <MediaViewer 
-        visible={mediaViewerVisible} 
-        media={mediaItem}
-        onClose={() => setMediaViewerVisible(false)}
+        visible={mediaViewerVisible}
+        media={getPostMediaItems(post)}
+        initialIndex={selectedMediaIndex}
+        onClose={() => {
+          setMediaViewerVisible(false);
+          setSelectedMediaIndex(0);
+        }}
       />
       
       {renderYoutubeModal()}
@@ -641,18 +717,16 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   image: {
-    width: '100%',
+    width: width - 32, // Account for container padding
     height: width * 0.7,
     borderRadius: 12,
-    marginBottom: 14,
-    backgroundColor: '#1E2B2F', // Midnight Green
+    backgroundColor: '#1E2B2F',
   },
   videoContainer: {
-    width: '100%',
+    width: width - 32, // Account for container padding
     height: width * 0.7,
     borderRadius: 12,
-    marginBottom: 14,
-    backgroundColor: '#1E2B2F', // Midnight Green
+    backgroundColor: '#1E2B2F',
     overflow: 'hidden',
     position: 'relative',
   },
@@ -807,5 +881,76 @@ const styles = StyleSheet.create({
   },
   commentActiveText: {
     color: '#3BAFBC', // Teal Glow
-  }
+  },
+  
+  // Multi-image carousel styles
+  multiMediaCarouselContainer: {
+    width: '100%',
+    height: width * 0.7, // Maintain aspect ratio
+    backgroundColor: '#18181A',
+    borderRadius: 12,
+    marginBottom: 14,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  multiMediaItem: {
+    width: width - 32, // Account for container padding
+    height: width * 0.7,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  multiMediaList: {
+    alignItems: 'center',
+  },
+  mediaCountContainer: {
+    position: 'absolute',
+    bottom: 12,
+    right: 12,
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  mediaCountText: {
+    color: '#F5F5F7',
+    fontSize: 13,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  mediaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-start',
+    marginBottom: 14,
+    borderRadius: 12,
+    overflow: 'hidden',
+    // width and alignSelf now set inline
+  },
+  gridItem: {
+    overflow: 'hidden',
+    // No flex properties! Sizing is handled inline
+  },
+  gridMedia: {
+    width: '100%',
+    height: '100%',
+  },
+  videoGridItem: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
+  },
+  moreOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  moreText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
 });
