@@ -37,6 +37,7 @@
       "googleServicesFile": "./google-services.json",
       "jsEngine": "hermes",
       "splash": {
+        "image": "./assets/mainlogo.png",
         "resizeMode": "contain",
         "backgroundColor": "#000000"
       }
@@ -69,13 +70,13 @@
         }
       ],
       [
-      "expo-build-properties",
-      {
-        "ios": {
-          "useFrameworks": "static"
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
         }
-      }
-    ]
+      ]
     ]
   }
 }
