@@ -1,5 +1,4 @@
 // components/memories/MediaPickerModal.js
-// app/components/memories/EnhancedMediaPicker.js
 import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
@@ -17,7 +16,6 @@ import {
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import * as MediaLibrary from 'expo-media-library';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import mediaService from '../../api/mediaService';
@@ -27,14 +25,7 @@ const { width } = Dimensions.get('window');
 
 /**
  * Enhanced Media Picker Modal with Direct-to-R2 Uploads
- * 
- * @param {Object} props Component props
- * @param {boolean} props.visible Whether the modal is visible
- * @param {Function} props.onClose Function to close the modal
- * @param {Function} props.onSelectMedia Function called when media is selected
- * @param {string} props.memoryId Optional memory ID to add media to directly
- * @param {boolean} props.allowMultiple Whether to allow multiple selection
- * @param {boolean} props.showVideos Whether to display video upload option
+ * Using Android Photo Picker API to avoid permission requests
  */
 const EnhancedMediaPicker = ({
   visible,
@@ -45,23 +36,15 @@ const EnhancedMediaPicker = ({
   showVideos = true
 }) => {
   // State
-  const [hasPermission, setHasPermission] = useState(null);
   const [mediaItems, setMediaItems] = useState([]);
   const [selectedItems, setSelectedItems] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [loadingMedia, setLoadingMedia] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [currentTab, setCurrentTab] = useState('photos'); // 'photos', 'videos'
-  const [isEndReached, setIsEndReached] = useState(false);
   
   // Refs
   const isMountedRef = useRef(true);
-  const paginationRef = useRef({
-    hasNextPage: true,
-    endCursor: null,
-    numColumns: 3,
-    pageSize: 60, // Load 60 items at a time
-  });
   
   // Clean up on unmount
   useEffect(() => {
@@ -70,137 +53,60 @@ const EnhancedMediaPicker = ({
     };
   }, []);
   
-  // Request permissions and load media when modal becomes visible
+  // Reset selections when modal closes
   useEffect(() => {
-    if (visible) {
-      requestPermissions();
-    } else {
-      // Reset selections when modal closes
+    if (!visible) {
       setSelectedItems([]);
       setCurrentTab('photos');
     }
   }, [visible]);
   
-  // Load media items when permissions are granted
-  useEffect(() => {
-    if (hasPermission === true && currentTab === 'photos') {
-      loadMediaItems();
-    }
-  }, [hasPermission, currentTab]);
-  
   /**
-   * Request media library permissions
+   * Launch system photo picker - avoiding permissions
    */
-  const requestPermissions = async () => {
-    try {
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      
-      if (status !== 'granted') {
-        Alert.alert(
-          'Permissions Required',
-          'Media library permissions are needed to select photos and videos.',
-          [{ text: 'OK' }]
-        );
-      }
-      
-      setHasPermission(status === 'granted');
-    } catch (err) {
-      console.error('Error requesting permissions:', err);
-      setHasPermission(false);
-    }
-  };
-  
-  /**
-   * Load media items from the device's media library
-   */
-  const loadMediaItems = async (isLoadMore = false) => {
-    if (loadingMedia || !hasPermission || (isLoadMore && !paginationRef.current.hasNextPage)) {
-      return;
-    }
-    
+  const launchImagePicker = async (isMultiple = false) => {
     try {
       setLoadingMedia(true);
       
-      // Configure media query based on tab
-      const mediaType = currentTab === 'photos' ? 
-        [MediaLibrary.MediaType.photo] : 
-        [MediaLibrary.MediaType.video];
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsMultiple: isMultiple,
+        quality: 0.8,
+        presentationStyle: 1, // Use CURRENT_CONTEXT for system photo picker
+        aspect: [4, 3]
+      });
       
-      // Load media items with pagination
-      const options = {
-        mediaType,
-        first: paginationRef.current.pageSize,
-        sortBy: [MediaLibrary.SortBy.creationTime],
-      };
-      
-      // Add after cursor for pagination
-      if (isLoadMore && paginationRef.current.endCursor) {
-        options.after = paginationRef.current.endCursor;
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Map the assets to our format
+        const newMediaItems = result.assets.map(asset => ({
+          id: asset.assetId || `temp-${Date.now()}-${Math.random()}`,
+          uri: asset.uri,
+          width: asset.width,
+          height: asset.height,
+          mediaType: 'photo',
+          fileName: asset.fileName || `photo-${Date.now()}.jpg`,
+          fileSize: asset.fileSize,
+          type: asset.type || 'image/jpeg'
+        }));
+        
+        setMediaItems(newMediaItems);
+        
+        // If not multiple selection, immediately upload the first item
+        if (!isMultiple) {
+          handleUploadMedia([newMediaItems[0]]);
+        } else {
+          // Otherwise, make all items selected
+          setSelectedItems(newMediaItems);
+        }
       }
-      
-      const { assets, endCursor, hasNextPage } = await MediaLibrary.getAssetsAsync(options);
-      
-      // Update pagination info
-      paginationRef.current.endCursor = endCursor;
-      paginationRef.current.hasNextPage = hasNextPage;
-      setIsEndReached(!hasNextPage);
-      
-      if (isLoadMore) {
-        // Append new items to existing list
-        setMediaItems(prevItems => [...prevItems, ...assets]);
-      } else {
-        // Replace list with new items
-        setMediaItems(assets);
-      }
-    } catch (err) {
-      console.error('Error loading media items:', err);
+    } catch (error) {
+      console.error('Error picking media:', error);
       Alert.alert(
-        'Error Loading Media',
+        'Error',
         'There was a problem loading your media. Please try again.'
       );
     } finally {
       setLoadingMedia(false);
-    }
-  };
-  
-  /**
-   * Handle end reached for pagination
-   */
-  const handleEndReached = () => {
-    if (!loadingMedia && paginationRef.current.hasNextPage) {
-      loadMediaItems(true);
-    }
-  };
-  
-  /**
-   * Handle media item selection
-   */
-  const handleSelectItem = (item) => {
-    Haptics.selectionAsync();
-    
-    if (allowMultiple) {
-      // Multiple selection mode
-      const isSelected = selectedItems.some(selected => selected.id === item.id);
-      
-      if (isSelected) {
-        // Remove from selection
-        setSelectedItems(prevItems => 
-          prevItems.filter(selected => selected.id !== item.id)
-        );
-      } else {
-        // Add to selection (limited to 10 items for performance)
-        if (selectedItems.length < 10) {
-          setSelectedItems(prevItems => [...prevItems, item]);
-        } else {
-          Alert.alert(
-            'Selection Limit',
-            'You can select up to 10 items at once.'
-          );
-        }
-      }
-    } else {
-      // Single selection mode - immediately upload
-      handleUploadMedia([item]);
     }
   };
   
@@ -272,13 +178,11 @@ const EnhancedMediaPicker = ({
         
         try {
           // Prepare media info
-          const assetInfo = await MediaLibrary.getAssetInfoAsync(item.id);
-          
           const mediaInfo = {
-            uri: assetInfo.localUri || assetInfo.uri,
-            fileName: assetInfo.filename || `media-${Date.now()}.jpg`,
-            type: assetInfo.mediaType === 'photo' ? 'image/jpeg' : 'video/mp4',
-            fileSize: assetInfo.fileSize
+            uri: item.uri,
+            fileName: item.fileName || `media-${Date.now()}.jpg`,
+            type: item.type || 'image/jpeg',
+            fileSize: item.fileSize
           };
           
           // Use mediaService to handle the upload
@@ -331,149 +235,6 @@ const EnhancedMediaPicker = ({
   };
   
   /**
-   * Render a grid item
-   */
-  const renderItem = ({ item }) => {
-    const isSelected = selectedItems.some(selected => selected.id === item.id);
-    const itemSize = width / paginationRef.current.numColumns - 8;
-    
-    return (
-      <TouchableOpacity
-        style={[
-          styles.mediaItem,
-          { width: itemSize, height: itemSize },
-          isSelected && styles.selectedItem
-        ]}
-        onPress={() => handleSelectItem(item)}
-        activeOpacity={0.7}
-      >
-        <Image
-          source={{ uri: item.uri }}
-          style={styles.mediaItemImage}
-          resizeMode="cover"
-        />
-        
-        {item.mediaType === 'video' && (
-          <View style={styles.videoIndicator}>
-            <Ionicons name="play-circle" size={24} color="white" />
-          </View>
-        )}
-        
-        {allowMultiple && isSelected && (
-          <View style={styles.selectionIndicator}>
-            <View style={styles.selectionCircle}>
-              <Ionicons name="checkmark" size={16} color="white" />
-            </View>
-          </View>
-        )}
-      </TouchableOpacity>
-    );
-  };
-  
-  /**
-   * Render the media grid
-   */
-  const renderMediaGrid = () => (
-    <FlatList
-      data={mediaItems}
-      renderItem={renderItem}
-      keyExtractor={(item) => item.id}
-      numColumns={paginationRef.current.numColumns}
-      contentContainerStyle={styles.gridContainer}
-      onEndReached={handleEndReached}
-      onEndReachedThreshold={0.3}
-      ListFooterComponent={
-        loadingMedia && !isEndReached ? (
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="small" color="#3BAFBC" />
-          </View>
-        ) : null
-      }
-      ListEmptyComponent={
-        !loadingMedia ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="images-outline" size={48} color="#8E8E93" />
-            <Text style={styles.emptyText}>No media found</Text>
-          </View>
-        ) : (
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#3BAFBC" />
-          </View>
-        )
-      }
-    />
-  );
-  
-  /**
-   * Render the video uploader
-   */
-  const renderVideoUploader = () => (
-    <VideoUploader
-      memoryId={memoryId}
-      onUploadComplete={(result) => {
-        onSelectMedia([result]);
-        
-        // Close modal after successful upload
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            onClose();
-          }
-        }, 1000);
-      }}
-      onError={(error) => {
-        console.error('Video upload error:', error);
-      }}
-      style={styles.videoUploader}
-    />
-  );
-  
-  /**
-   * Render the bottom action bar
-   */
-  const renderActionBar = () => (
-    <View style={styles.actionBar}>
-      {allowMultiple && currentTab === 'photos' && (
-        <TouchableOpacity
-          style={[
-            styles.uploadButton,
-            selectedItems.length === 0 && styles.disabledButton
-          ]}
-          onPress={() => handleUploadMedia()}
-          disabled={selectedItems.length === 0 || uploading}
-        >
-          <LinearGradient
-            colors={['#3BAFBC', '#1E2B2F']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={styles.uploadButtonGradient}
-          >
-            {uploading ? (
-              <ActivityIndicator size="small" color="white" />
-            ) : (
-              <>
-                <Ionicons name="cloud-upload" size={20} color="white" />
-                <Text style={styles.uploadButtonText}>
-                  Upload {selectedItems.length > 0 ? `(${selectedItems.length})` : ''}
-                </Text>
-              </>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-      )}
-      
-      {currentTab === 'photos' && (
-        <TouchableOpacity
-          style={styles.cameraButton}
-          onPress={handleTakePhoto}
-          disabled={uploading}
-        >
-          <Ionicons name="camera" size={24} color="#3BAFBC" />
-        </TouchableOpacity>
-      )}
-    </View>
-  );
-  
-  /**
    * Render the tab selector
    */
   const renderTabSelector = () => (
@@ -513,6 +274,155 @@ const EnhancedMediaPicker = ({
             styles.tabText,
             currentTab === 'videos' && styles.activeTabText
           ]}>Videos</Text>
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+  
+  /**
+   * Render the image selection content
+   */
+  const renderPhotoSelection = () => (
+    <View style={styles.photoSelectionContainer}>
+      {mediaItems.length > 0 ? (
+        <FlatList
+          data={mediaItems}
+          renderItem={({ item }) => {
+            const isSelected = selectedItems.some(selected => selected.id === item.id);
+            const itemSize = width / 3 - 8;
+            
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.mediaItem,
+                  { width: itemSize, height: itemSize },
+                  isSelected && styles.selectedItem
+                ]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  
+                  if (allowMultiple) {
+                    // Toggle selection
+                    if (isSelected) {
+                      setSelectedItems(prev => prev.filter(s => s.id !== item.id));
+                    } else {
+                      setSelectedItems(prev => [...prev, item]);
+                    }
+                  } else {
+                    // Direct upload for single selection
+                    handleUploadMedia([item]);
+                  }
+                }}
+                activeOpacity={0.7}
+              >
+                <Image
+                  source={{ uri: item.uri }}
+                  style={styles.mediaItemImage}
+                  resizeMode="cover"
+                />
+                
+                {allowMultiple && isSelected && (
+                  <View style={styles.selectionIndicator}>
+                    <View style={styles.selectionCircle}>
+                      <Ionicons name="checkmark" size={16} color="white" />
+                    </View>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
+          keyExtractor={(item) => item.id}
+          numColumns={3}
+          contentContainerStyle={styles.gridContainer}
+        />
+      ) : (
+        <View style={styles.selectActionsContainer}>
+          <TouchableOpacity
+            style={styles.browseButton}
+            onPress={() => launchImagePicker(allowMultiple)}
+          >
+            <LinearGradient
+              colors={['#3BAFBC', '#1E2B2F']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.browseButtonGradient}
+            >
+              <Ionicons name="images" size={24} color="white" />
+              <Text style={styles.browseButtonText}>Browse Photos</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          
+          <TouchableOpacity
+            style={styles.cameraButton}
+            onPress={handleTakePhoto}
+          >
+            <View style={styles.cameraButtonInner}>
+              <Ionicons name="camera" size={24} color="#3BAFBC" />
+              <Text style={styles.cameraButtonText}>Take Photo</Text>
+            </View>
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+  
+  /**
+   * Render the bottom action bar
+   */
+  const renderActionBar = () => (
+    <View style={styles.actionBar}>
+      {allowMultiple && currentTab === 'photos' && mediaItems.length > 0 && (
+        <TouchableOpacity
+          style={[
+            styles.uploadButton,
+            selectedItems.length === 0 && styles.disabledButton
+          ]}
+          onPress={() => handleUploadMedia()}
+          disabled={selectedItems.length === 0 || uploading}
+        >
+          <LinearGradient
+            colors={['#3BAFBC', '#1E2B2F']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.uploadButtonGradient}
+          >
+            {uploading ? (
+              <ActivityIndicator size="small" color="white" />
+            ) : (
+              <>
+                <Ionicons name="cloud-upload" size={20} color="white" />
+                <Text style={styles.uploadButtonText}>
+                  Upload {selectedItems.length > 0 ? `(${selectedItems.length})` : ''}
+                </Text>
+              </>
+            )}
+          </LinearGradient>
+        </TouchableOpacity>
+      )}
+      
+      {currentTab === 'photos' && (
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => {
+            if (mediaItems.length > 0) {
+              // Clear selection
+              setMediaItems([]);
+              setSelectedItems([]);
+            } else {
+              // Take photo
+              handleTakePhoto();
+            }
+          }}
+          disabled={uploading}
+        >
+          <Ionicons 
+            name={mediaItems.length > 0 ? "refresh" : "camera"} 
+            size={22} 
+            color="#3BAFBC" 
+          />
+          <Text style={styles.secondaryButtonText}>
+            {mediaItems.length > 0 ? "Clear" : "Camera"}
+          </Text>
         </TouchableOpacity>
       )}
     </View>
@@ -566,7 +476,25 @@ const EnhancedMediaPicker = ({
           {renderTabSelector()}
           
           <View style={styles.content}>
-            {currentTab === 'photos' ? renderMediaGrid() : renderVideoUploader()}
+            {currentTab === 'photos' ? renderPhotoSelection() : (
+              <VideoUploader
+                memoryId={memoryId}
+                onUploadComplete={(result) => {
+                  onSelectMedia([result]);
+                  
+                  // Close modal after successful upload
+                  setTimeout(() => {
+                    if (isMountedRef.current) {
+                      onClose();
+                    }
+                  }, 1000);
+                }}
+                onError={(error) => {
+                  console.error('Video upload error:', error);
+                }}
+                style={styles.videoUploader}
+              />
+            )}
           </View>
           
           {currentTab === 'photos' && renderActionBar()}
@@ -634,6 +562,57 @@ const styles = StyleSheet.create({
     color: '#3BAFBC',
     fontWeight: '500',
   },
+  photoSelectionContainer: {
+    flex: 1,
+  },
+  selectActionsContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+  },
+  browseButton: {
+    marginBottom: 20,
+    borderRadius: 10,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  browseButtonGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+  },
+  browseButtonText: {
+    color: '#FFFFFF',
+    fontWeight: '600',
+    fontSize: 18,
+    marginLeft: 10,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  cameraButton: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(59, 175, 188, 0.3)',
+    overflow: 'hidden',
+  },
+  cameraButtonInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 16,
+    backgroundColor: 'rgba(59, 175, 188, 0.1)',
+  },
+  cameraButtonText: {
+    color: '#3BAFBC',
+    fontWeight: '600',
+    fontSize: 18,
+    marginLeft: 10,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
   gridContainer: {
     padding: 4,
   },
@@ -651,13 +630,6 @@ const styles = StyleSheet.create({
   mediaItemImage: {
     width: '100%',
     height: '100%',
-  },
-  videoIndicator: {
-    position: 'absolute',
-    right: 5,
-    bottom: 5,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    borderRadius: 12,
   },
   selectionIndicator: {
     position: 'absolute',
@@ -692,6 +664,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
+    marginRight: 10,
   },
   uploadButtonGradient: {
     flexDirection: 'row',
@@ -706,34 +679,24 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  cameraButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: 'rgba(59, 175, 188, 0.2)',
-    justifyContent: 'center',
+  secondaryButton: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginLeft: 16,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: 'rgba(59, 175, 188, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(59, 175, 188, 0.3)',
   },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-    marginTop: 50,
-  },
-  emptyText: {
+  secondaryButtonText: {
+    color: '#3BAFBC',
+    fontWeight: '500',
     fontSize: 16,
-    color: '#8E8E93',
-    marginTop: 16,
+    marginLeft: 8,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-  loaderContainer: {
-    padding: 20,
-    alignItems: 'center',
+  disabledButton: {
+    opacity: 0.5,
   },
   videoUploader: {
     flex: 1,

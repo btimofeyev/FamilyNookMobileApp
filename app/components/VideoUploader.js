@@ -8,28 +8,20 @@ import {
   ActivityIndicator,
   Alert,
   Image,
-  Platform,
-  PermissionsAndroid
+  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as VideoThumbnails from 'expo-video-thumbnails';
-import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
-import { mediaService } from '../api/mediaService';
+import mediaService from '../api/mediaService';
 
 /**
  * Video Uploader Component with direct-to-R2 uploading
- * 
- * @param {Object} props Component props
- * @param {string} props.memoryId Optional memory ID to add video to
- * @param {Function} props.onUploadStart Callback when upload starts
- * @param {Function} props.onUploadComplete Callback when upload completes
- * @param {Function} props.onError Callback when error occurs
- * @param {Object} props.style Additional styles
+ * Updated to use system photo picker and avoid permission requests
  */
 const VideoUploader = ({
   memoryId,
@@ -63,47 +55,6 @@ const VideoUploader = ({
     };
   }, []);
 
-  /**
-   * Request permissions for camera and media library
-   */
-  const requestPermissions = async () => {
-    try {
-      let cameraPermission, mediaLibraryPermission;
-      
-      if (Platform.OS === 'android') {
-        const cameraResult = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.CAMERA
-        );
-        const storageResult = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
-        );
-        
-        cameraPermission = cameraResult === PermissionsAndroid.RESULTS.GRANTED;
-        mediaLibraryPermission = storageResult === PermissionsAndroid.RESULTS.GRANTED;
-      } else {
-        const cameraStatus = await ImagePicker.requestCameraPermissionsAsync();
-        const mediaLibraryStatus = await MediaLibrary.requestPermissionsAsync();
-        
-        cameraPermission = cameraStatus.status === 'granted';
-        mediaLibraryPermission = mediaLibraryStatus.status === 'granted';
-      }
-      
-      if (!cameraPermission || !mediaLibraryPermission) {
-        Alert.alert(
-          'Permissions Required',
-          'Camera and media library permissions are needed to upload videos.',
-          [{ text: 'OK' }]
-        );
-        return false;
-      }
-      
-      return true;
-    } catch (err) {
-      console.error('Error requesting permissions:', err);
-      return false;
-    }
-  };
-  
   /**
    * Generate a thumbnail from a video
    */
@@ -145,30 +96,41 @@ const VideoUploader = ({
   };
   
   /**
-   * Pick a video from the library or camera
+   * Pick a video from the library or camera using system picker
    */
   const pickVideo = async (source = 'library') => {
     try {
-      // Request permissions first
-      const hasPermissions = await requestPermissions();
-      if (!hasPermissions) return;
-      
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       
       let result;
       if (source === 'camera') {
+        // Request camera permission only (not storage)
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        
+        if (status !== 'granted') {
+          Alert.alert(
+            'Camera Permission Required',
+            'Camera access is needed to record videos.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        
         result = await ImagePicker.launchCameraAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Videos,
           allowsEditing: false,
           quality: 1,
           videoMaxDuration: 60 * 5, // 5 minutes max
+          presentationStyle: 1, // Use CURRENT_CONTEXT to avoid storage permissions
         });
       } else {
+        // Use system photo picker - no permissions needed
         result = await ImagePicker.launchImageLibraryAsync({
           mediaTypes: ImagePicker.MediaTypeOptions.Videos,
           allowsEditing: false,
           quality: 1,
           videoMaxDuration: 60 * 5, // 5 minutes max
+          presentationStyle: 1, // Use CURRENT_CONTEXT to avoid storage permissions
         });
       }
       
@@ -179,8 +141,19 @@ const VideoUploader = ({
       const videoAsset = result.assets[0];
       
       // Check file size - warn if larger than 50MB
-      const fileInfo = await FileSystem.getInfoAsync(videoAsset.uri, { size: true });
-      const fileSizeMB = fileInfo.size / (1024 * 1024);
+      let fileSize = videoAsset.fileSize;
+      
+      // If fileSize is not provided, try to get it
+      if (!fileSize) {
+        try {
+          const fileInfo = await FileSystem.getInfoAsync(videoAsset.uri, { size: true });
+          fileSize = fileInfo.size;
+        } catch (error) {
+          console.warn('Could not determine file size:', error);
+        }
+      }
+      
+      const fileSizeMB = fileSize ? fileSize / (1024 * 1024) : 0;
       
       if (fileSizeMB > 50) {
         // Show warning for large files
@@ -194,12 +167,12 @@ const VideoUploader = ({
             },
             {
               text: 'Continue',
-              onPress: () => processSelectedVideo(videoAsset, fileInfo)
+              onPress: () => processSelectedVideo(videoAsset, fileSize)
             }
           ]
         );
       } else {
-        processSelectedVideo(videoAsset, fileInfo);
+        processSelectedVideo(videoAsset, fileSize);
       }
     } catch (err) {
       console.error('Error picking video:', err);
@@ -216,7 +189,7 @@ const VideoUploader = ({
   /**
    * Process a selected video
    */
-  const processSelectedVideo = async (videoAsset, fileInfo) => {
+  const processSelectedVideo = async (videoAsset, fileSize) => {
     try {
       // Generate thumbnail
       const thumbnailUri = await generateThumbnail(videoAsset.uri);
@@ -227,8 +200,9 @@ const VideoUploader = ({
       // Create file info object with size
       const enhancedVideoAsset = {
         ...videoAsset,
-        fileSize: fileInfo.size,
-        fileName: videoAsset.fileName || `video-${Date.now()}.mp4`
+        fileSize: fileSize,
+        fileName: videoAsset.fileName || `video-${Date.now()}.mp4`,
+        type: videoAsset.mimeType || 'video/mp4'
       };
       
       setVideo(enhancedVideoAsset);
