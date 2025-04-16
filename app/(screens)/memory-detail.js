@@ -1,4 +1,5 @@
 // app/(screens)/memory-detail.js
+// app/(screens)/memory-detail.js - Updated with presigned uploads
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
@@ -9,7 +10,6 @@ import {
   TouchableOpacity,
   Alert,
   RefreshControl,
-  ActionSheetIOS,
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
@@ -18,20 +18,18 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BlurView } from "expo-blur";
-import * as ImagePicker from "expo-image-picker";
+import * as Haptics from "expo-haptics";
 import {
   getMemoryContent,
   getMemoryComments,
   addCommentToMemory,
-  addContentToMemory,
   deleteMemory,
 } from "../api/memoriesService";
 import LoadingIndicator from "../components/LoadingIndicator";
 import CommentSection from "../components/CommentSection";
 import MediaViewer from "../components/MediaViewer";
-import MediaPickerModal from "../components/memories/MediaPickerModal";
-
 import FloatingCreateButton from "../components/FloatingCreateButton";
+import EnhancedMediaPicker from "../components/memories/MediaPickerModal"; // Use our new component
 
 export default function MemoryDetailScreen() {
   const { memoryId, title } = useLocalSearchParams();
@@ -41,10 +39,10 @@ export default function MemoryDetailScreen() {
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [selectedMedia, setSelectedMedia] = useState(null);
   const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
   const [mediaPickerVisible, setMediaPickerVisible] = useState(false);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
 
   const fetchMemoryData = useCallback(async () => {
     try {
@@ -74,31 +72,16 @@ export default function MemoryDetailScreen() {
   }, [fetchMemoryData]);
 
   const handleAddContent = () => {
+    // Show the enhanced media picker
     setMediaPickerVisible(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
-  const handleMediaSelected = async (uri) => {
-    try {
-      setUploading(true);
-      await addContentToMemory(memoryId, uri);
-      fetchMemoryData();
-    } catch (error) {
-      console.error("Error uploading image:", error);
-      Alert.alert("Error", "Failed to upload image. Please try again.");
-    } finally {
-      setUploading(false);
-    }
-  };
-  const uploadImage = async (uri) => {
-    try {
-      setUploading(true);
-      await addContentToMemory(memoryId, uri);
-      fetchMemoryData();
-    } catch (error) {
-      console.error("Error uploading image:", error);
-      Alert.alert("Error", "Failed to upload image. Please try again.");
-    } finally {
-      setUploading(false);
-    }
+
+  const handleMediaSelected = async (mediaResults) => {
+    // Media has been uploaded directly to R2 and associated with this memory
+    // No need to do anything here except refresh the content
+    console.log('Media successfully uploaded:', mediaResults);
+    fetchMemoryData();
   };
 
   const handleDeleteMemory = () => {
@@ -243,7 +226,6 @@ export default function MemoryDetailScreen() {
           )}
           ListFooterComponent={() => (
             <View style={styles.commentsSection}>
-              {/* Replace the manual comments section with the CommentSection component */}
               <CommentSection
                 postId={memoryId}
                 initialComments={comments}
@@ -263,17 +245,33 @@ export default function MemoryDetailScreen() {
           }
         />
       </KeyboardAvoidingView>
+      
+      {/* Floating Action Button */}
       <FloatingCreateButton
         onPress={handleAddContent}
         allowedScreens={["/memory-detail"]}
         iconName="camera"
+        disabled={uploadingMedia}
       />
-      {/* Media Viewer Modal */}
-      <MediaPickerModal
+      
+      {/* Enhanced Media Picker Modal */}
+      <EnhancedMediaPicker
         visible={mediaPickerVisible}
         onClose={() => setMediaPickerVisible(false)}
         onSelectMedia={handleMediaSelected}
+        memoryId={memoryId}
+        allowMultiple={true}
+        showVideos={true}
       />
+      
+      {/* Media Viewer Modal for viewing content */}
+      {selectedMedia && (
+        <MediaViewer
+          visible={mediaViewerVisible}
+          onClose={handleCloseMediaViewer}
+          media={selectedMedia}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -318,19 +316,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: "#FFFFFF",
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
-  },
-  addButton: {
-    backgroundColor: "#F0C142", // Golden yellow from the logo
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
   },
   emptyContent: {
     borderRadius: 12,
