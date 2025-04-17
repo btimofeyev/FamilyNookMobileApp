@@ -1,5 +1,6 @@
 // app/api/mediaService.js
 import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native'; // Add this import
 import apiClient from './client';
 
 /**
@@ -54,51 +55,49 @@ export const getPresignedUploadUrl = async (fileInfo) => {
  * @returns {Promise<Object>} Upload result details
  */
 export const uploadFileWithPresignedUrl = async (presignedUrl, fileInfo, onProgress) => {
-  try {
-    // Get the file URI
-    const fileUri = fileInfo.uri;
-    if (!fileUri) {
-      throw new Error('File URI is required');
-    }
-
-    // Create upload options
-    const uploadOptions = {
-      httpMethod: 'PUT',
-      uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-      headers: {
-        'Content-Type': fileInfo.type || 'application/octet-stream'
+    try {
+      // Get the file URI
+      const fileUri = fileInfo.uri;
+      if (!fileUri) {
+        throw new Error('File URI is required');
       }
-    };
-
-    // Add progress callback if provided
-    if (onProgress && typeof onProgress === 'function') {
-      uploadOptions.sessionType = FileSystem.FileSystemSessionType.BACKGROUND;
-      uploadOptions.uploadType = FileSystem.FileSystemUploadType.BINARY_CONTENT;
+  
+      // Create upload options
+      const uploadOptions = {
+        httpMethod: 'PUT',
+        uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+        headers: {
+          'Content-Type': fileInfo.type || 'application/octet-stream'
+        }
+      };
+  
+      // Add progress callback if provided
+      if (onProgress && typeof onProgress === 'function') {
+        uploadOptions.sessionType = FileSystem.FileSystemSessionType.BACKGROUND;
+        
+        // Check if Platform is available before using it
+        if (Platform && Platform.OS === 'android') {
+          uploadOptions.progressInterval = 100; // Report progress every 100ms on Android
+        }
+      }
+  
+      // Start the upload
+      console.log(`Starting direct upload to ${presignedUrl}`);
+      const uploadResult = await FileSystem.uploadAsync(presignedUrl, fileUri, uploadOptions);
       
-      // Unfortunately, iOS doesn't support progress for uploadAsync
-      // Apply platform-specific settings
-      if (Platform.OS === 'android') {
-        uploadOptions.progressInterval = 100; // Report progress every 100ms on Android
+      // Check if upload was successful
+      if (uploadResult.status !== 200 && uploadResult.status !== 201) {
+        console.error('Upload failed with status:', uploadResult.status);
+        throw new Error(`Upload failed with status ${uploadResult.status}`);
       }
+  
+      console.log('Upload completed successfully');
+      return uploadResult;
+    } catch (error) {
+      console.error('Error uploading file with presigned URL:', error);
+      throw error;
     }
-
-    // Start the upload
-    console.log(`Starting direct upload to ${presignedUrl}`);
-    const uploadResult = await FileSystem.uploadAsync(presignedUrl, fileUri, uploadOptions);
-    
-    // Check if upload was successful
-    if (uploadResult.status !== 200 && uploadResult.status !== 201) {
-      console.error('Upload failed with status:', uploadResult.status);
-      throw new Error(`Upload failed with status ${uploadResult.status}`);
-    }
-
-    console.log('Upload completed successfully');
-    return uploadResult;
-  } catch (error) {
-    console.error('Error uploading file with presigned URL:', error);
-    throw error;
-  }
-};
+  };
 
 /**
  * Confirm a completed upload
@@ -120,58 +119,18 @@ export const confirmUpload = async (uploadId, key) => {
 };
 
 /**
- * Cancel an upload and delete the file if it exists
- * @param {string} uploadId The upload ID to cancel
- * @param {string} key The object key in R2
- * @returns {Promise<Object>} Cancellation details
- */
-export const cancelUpload = async (uploadId, key) => {
-  try {
-    const response = await apiClient.post('/api/media/cancel-upload', {
-      uploadId,
-      key
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error cancelling upload:', error);
-    throw error;
-  }
-};
-
-/**
- * Add an uploaded file to a specific memory
- * @param {string} memoryId The memory ID to add media to
- * @param {string} uploadId The upload ID of the completed upload
- * @param {string} key The object key in R2
- * @returns {Promise<Object>} Added media details
- */
-export const addMediaToMemory = async (memoryId, uploadId, key) => {
-  try {
-    const response = await apiClient.post(`/api/media/memories/${memoryId}/media`, {
-      uploadId,
-      key
-    });
-    return response.data;
-  } catch (error) {
-    console.error('Error adding media to memory:', error);
-    throw error;
-  }
-};
-
-/**
- * Upload a media file to R2 storage and optionally add it to a memory
+ * Upload a media file to R2 storage
  * This is a convenience method that handles the full upload workflow
  * 
  * @param {Object} fileInfo Object containing file information
  * @param {Object} options Upload options
- * @param {string} options.memoryId Optional memory ID to add media to
  * @param {Function} options.onProgress Optional progress callback
  * @param {Function} options.onSuccess Optional success callback
  * @param {Function} options.onError Optional error callback
  * @returns {Promise<Object>} Upload result details
  */
 export const uploadMedia = async (fileInfo, options = {}) => {
-  const { memoryId, onProgress, onSuccess, onError } = options;
+  const { onProgress, onSuccess, onError } = options;
   
   try {
     // Step 1: Get a presigned URL
@@ -183,20 +142,12 @@ export const uploadMedia = async (fileInfo, options = {}) => {
     // Step 3: Confirm the upload
     await confirmUpload(uploadId, key);
     
-    // Step 4: Add to memory if specified
-    let memoryContent = null;
-    if (memoryId) {
-      const result = await addMediaToMemory(memoryId, uploadId, key);
-      memoryContent = result.content;
-    }
-    
     // Call success callback if provided
     if (onSuccess && typeof onSuccess === 'function') {
       onSuccess({
         uploadId,
         key,
-        fileUrl,
-        memoryContent
+        fileUrl
       });
     }
     
@@ -204,8 +155,7 @@ export const uploadMedia = async (fileInfo, options = {}) => {
       success: true,
       uploadId,
       key,
-      fileUrl,
-      memoryContent
+      fileUrl
     };
   } catch (error) {
     console.error('Error in uploadMedia flow:', error);
@@ -223,7 +173,5 @@ export default {
   getPresignedUploadUrl,
   uploadFileWithPresignedUrl,
   confirmUpload,
-  cancelUpload,
-  addMediaToMemory,
   uploadMedia
 };

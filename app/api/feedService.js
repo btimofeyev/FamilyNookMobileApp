@@ -150,65 +150,35 @@ export const createPost = async (familyId, data) => {
   
   try {
     // Validate data before sending
-    if (!data || (!data.caption && !data.mediaItems && !data.media)) {
+    if (!data || (!data.caption && !data.mediaUrls && !data.mediaUrls?.length === 0)) {
       throw new FeedServiceError(
         'Post must contain text or media',
         ErrorCodes.VALIDATION_ERROR
       );
     }
     
-    const formData = new FormData();
-    formData.append('caption', data.caption || '');
-    formData.append('familyId', familyId);
+    // Create payload object with caption and familyId
+    const payload = {
+      caption: data.caption || '',
+      familyId: familyId
+    };
     
-    // Handle multiple media items
-    if (data.mediaItems && data.mediaItems.length > 0) {
-      // Send all media items as an array under the 'media' key
-      data.mediaItems.forEach((mediaItem, index) => {
-        if (!mediaItem.uri) {
-          throw new FeedServiceError(
-            `Media item ${index + 1} must have a valid URI`,
-            ErrorCodes.VALIDATION_ERROR
-          );
-        }
-        
-        formData.append('media', {
-          uri: mediaItem.uri,
-          name: mediaItem.fileName || `media-${Date.now()}-${index}.${mediaItem.type.split('/')[1] || 'jpg'}`,
-          type: mediaItem.type || 'image/jpeg'
-        });
-      });
-    }
-    // Legacy single media support
-    else if (data.media) {
-      if (!data.media.uri) {
-        throw new FeedServiceError(
-          'Media must have a valid URI',
-          ErrorCodes.VALIDATION_ERROR
-        );
+    // If we have media URLs that were already uploaded to R2
+    if (data.mediaUrls && data.mediaUrls.length > 0) {
+      payload.mediaUrls = data.mediaUrls;
+      if (data.mediaTypes) {
+        payload.mediaTypes = data.mediaTypes;
       }
-      
-      formData.append('media', {
-        uri: data.media.uri,
-        name: data.media.fileName || `photo-${Date.now()}.jpg`,
-        type: data.media.type || 'image/jpeg'
-      });
     }
     
-    // Set a longer timeout for uploads
-    const response = await apiClient.post(`/api/family/${familyId}/posts`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-      timeout: 60000 // 60 seconds timeout for media upload
-    });
-
+    // New endpoint to create posts with already-uploaded media
+    const response = await apiClient.post(`/api/family/${familyId}/posts/with-media`, payload);
+    
     return response.data;
   } catch (error) {
     throw handleApiError(error, 'Failed to create post');
   }
 };
-
 export const getFamilyPosts = async (familyId, page = 1) => {
   if (!familyId) {
     try {
