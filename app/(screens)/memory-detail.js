@@ -29,7 +29,7 @@ import LoadingIndicator from "../components/LoadingIndicator";
 import CommentSection from "../components/CommentSection";
 import MediaViewer from "../components/MediaViewer";
 import FloatingCreateButton from "../components/FloatingCreateButton";
-import EnhancedMediaPicker from "../components/memories/MediaPickerModal"; // Use our new component
+import EnhancedMediaPicker from "../components/shared/MediaPickerModal"; // Use our new component
 
 export default function MemoryDetailScreen() {
   const { memoryId, title } = useLocalSearchParams();

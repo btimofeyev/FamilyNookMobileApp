@@ -29,7 +29,9 @@
       "package": "com.btimofeyev.familynook",
       "versionCode": 1,
       "permissions": [
-        "NOTIFICATIONS"
+        "NOTIFICATIONS",
+        "READ_MEDIA_IMAGES",
+        "READ_MEDIA_VIDEO"
       ],
       "config": {
         "usesCleartextTraffic": true
