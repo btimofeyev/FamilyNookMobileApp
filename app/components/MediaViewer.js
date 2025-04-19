@@ -12,13 +12,17 @@ import {
   Animated,
   Platform,
   FlatList,
-  Text,
-  PanResponder,
-  ScrollView
+  Text
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Video } from 'expo-av';
 import * as Haptics from 'expo-haptics';
+import { 
+  PinchGestureHandler,
+  PanGestureHandler,
+  State,
+  GestureHandlerRootView
+} from 'react-native-gesture-handler';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,158 +33,32 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
   const flatListRef = useRef(null);
   const videoRef = useRef(null);
   
-  // State for zooming
-  const [scale, setScale] = useState(1);
-  const [lastTap, setLastTap] = useState(null);
-  const [panEnabled, setPanEnabled] = useState(false);
+  // Image zoom and pan values
+  const scale = useRef(new Animated.Value(1)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
   
-  // Animated values for zooming
-  const pan = useRef(new Animated.ValueXY()).current;
-  const pinchScale = useRef(new Animated.Value(1)).current;
+  // Keep track of cumulative values for gestures
+  const lastScale = useRef(1);
+  const lastTranslateX = useRef(0);
+  const lastTranslateY = useRef(0);
   
-  // Reset scale and pan when switching items or closing modal
-  React.useEffect(() => {
-    resetZoom();
-  }, [currentIndex, visible]);
+  // For pinch gesture base
+  const pinchBase = useRef(1);
   
-  // Reset zoom state
-  const resetZoom = () => {
-    setScale(1);
-    setPanEnabled(false);
-    pinchScale.setValue(1);
-    pan.setValue({ x: 0, y: 0 });
-  };
-  
-  // Handle double tap to zoom
-  const handleImageTap = (event) => {
-    const now = Date.now();
-    const DOUBLE_TAP_DELAY = 300;
-    
-    if (lastTap && (now - lastTap) < DOUBLE_TAP_DELAY) {
-      // Double tap detected
-      if (scale > 1) {
-        // Zoom out
-        Animated.parallel([
-          Animated.spring(pinchScale, { 
-            toValue: 1, 
-            friction: 3,
-            tension: 40,
-            useNativeDriver: true 
-          }),
-          Animated.spring(pan, { 
-            toValue: { x: 0, y: 0 },
-            friction: 3,
-            tension: 40,
-            useNativeDriver: true 
-          })
-        ]).start();
-        setScale(1);
-        setPanEnabled(false);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      } else {
-        // Zoom in
-        Animated.spring(pinchScale, { 
-          toValue: 2, 
-          friction: 3,
-          tension: 40,
-          useNativeDriver: true 
-        }).start();
-        setScale(2);
-        setPanEnabled(true);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      }
-      setLastTap(null);
-    } else {
-      // Single tap (or first tap of double tap)
-      setLastTap(now);
-      
-      // If it's a video or we're not zoomed in, handle regular tap
-      if (media[currentIndex].type === 'video' || media[currentIndex].url?.endsWith('.mp4') || scale === 1) {
-        // Toggle play/pause for video, or show/hide UI for images
-        if (media[currentIndex].type === 'video' || media[currentIndex].url?.endsWith('.mp4')) {
-          if (videoRef.current) {
-            if (isPlaying) {
-              videoRef.current.pauseAsync();
-            } else {
-              videoRef.current.playAsync();
-            }
-            setIsPlaying(!isPlaying);
-          }
-        }
-      }
-      
-      // To prevent single tap from closing instantly when zoomed
-      if (scale === 1) {
-        setTimeout(() => {
-          if (lastTap && (Date.now() - lastTap) >= DOUBLE_TAP_DELAY) {
-            setLastTap(null);
-          }
-        }, DOUBLE_TAP_DELAY);
-      }
-    }
-  };
-  
-  // Set up pan responder
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => panEnabled,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only handle moves when zoomed in
-        return panEnabled && (Math.abs(gestureState.dx) > 2 || Math.abs(gestureState.dy) > 2);
-      },
-      onPanResponderGrant: () => {
-        pan.setOffset({
-          x: pan.x._value,
-          y: pan.y._value
-        });
-        pan.setValue({ x: 0, y: 0 });
-      },
-      onPanResponderMove: Animated.event(
-        [null, { dx: pan.x, dy: pan.y }],
-        { useNativeDriver: false }
-      ),
-      onPanResponderRelease: (_, gestureState) => {
-        pan.flattenOffset();
-        
-        // Restrict panning beyond image bounds
-        const maxPanX = Math.max(0, (width * scale - width) / 2);
-        const maxPanY = Math.max(0, (height * scale - height) / 2);
-        
-        let newX = pan.x._value;
-        let newY = pan.y._value;
-        
-        // Limit X bounds
-        if (Math.abs(newX) > maxPanX) {
-          newX = newX > 0 ? maxPanX : -maxPanX;
-        }
-        
-        // Limit Y bounds
-        if (Math.abs(newY) > maxPanY) {
-          newY = newY > 0 ? maxPanY : -maxPanY;
-        }
-        
-        // Animate to valid position if needed
-        if (newX !== pan.x._value || newY !== pan.y._value) {
-          Animated.spring(pan, {
-            toValue: { x: newX, y: newY },
-            friction: 5,
-            tension: 40,
-            useNativeDriver: true
-          }).start();
-        }
-        
-        // If panning was minimal and we're not zoomed, allow FlatList to scroll
-        if (Math.abs(gestureState.dx) < 10 && Math.abs(gestureState.dy) < 10 && scale === 1) {
-          flatListRef.current?.setNativeProps({ scrollEnabled: true });
-        }
-      }
-    })
-  ).current;
+  // For double tap detection
+  const lastTapRef = useRef(0);
+  const lastTapTimeoutRef = useRef(null);
+
+  // Format media to array if it's a single item
+  const mediaArray = Array.isArray(media) ? media : media ? [media] : [];
 
   // Reset to initial index when modal opens
   React.useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
+      resetTransformations();
+      
       // Wait for modal to be visible before scrolling
       setTimeout(() => {
         flatListRef.current?.scrollToIndex({
@@ -190,6 +68,15 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
       }, 100);
     }
   }, [visible, initialIndex]);
+
+  const resetTransformations = () => {
+    scale.setValue(1);
+    translateX.setValue(0);
+    translateY.setValue(0);
+    lastScale.current = 1;
+    lastTranslateX.current = 0;
+    lastTranslateY.current = 0;
+  };
 
   const handleClose = () => {
     // Stop video if playing
@@ -217,15 +104,260 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
         useNativeDriver: true,
       }).start();
     }
+    
+    // Clear any pending timeouts when unmounting
+    return () => {
+      if (lastTapTimeoutRef.current) {
+        clearTimeout(lastTapTimeoutRef.current);
+      }
+    };
   }, [visible, fadeAnim]);
 
+  // Handle tap for zooming
+  const handleImageTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    
+    if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
+      // Clear any pending timeout
+      if (lastTapTimeoutRef.current) {
+        clearTimeout(lastTapTimeoutRef.current);
+        lastTapTimeoutRef.current = null;
+      }
+      
+      // Double tap detected
+      if (lastScale.current > 1) {
+        // Reset zoom and position
+        Animated.parallel([
+          Animated.spring(scale, {
+            toValue: 1,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true
+          }),
+          Animated.spring(translateX, {
+            toValue: 0,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true
+          }),
+          Animated.spring(translateY, {
+            toValue: 0,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true
+          })
+        ]).start();
+        
+        lastScale.current = 1;
+        lastTranslateX.current = 0;
+        lastTranslateY.current = 0;
+      } else {
+        // Zoom in to 2.5x
+        Animated.spring(scale, {
+          toValue: 2.5,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true
+        }).start();
+        
+        lastScale.current = 2.5;
+      }
+      
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      lastTapRef.current = 0; // Reset tap timestamp
+    } else {
+      // Single tap
+      lastTapRef.current = now;
+      
+      // Set a timeout to handle single tap actions
+      if (lastTapTimeoutRef.current) {
+        clearTimeout(lastTapTimeoutRef.current);
+      }
+      
+      lastTapTimeoutRef.current = setTimeout(() => {
+        // This will execute if no double-tap occurs
+        // You can toggle UI elements here if needed
+      }, DOUBLE_TAP_DELAY);
+    }
+  };
+
+  // Handle pinch gesture
+  const onPinchGestureEvent = Animated.event(
+    [{ nativeEvent: { scale: scale } }],
+    { 
+      useNativeDriver: true,
+      listener: (event) => {
+        // Apply the new scale based on the pinch gesture
+        const newScale = pinchBase.current * event.nativeEvent.scale;
+        
+        // Limit scale between 0.5 and 5
+        if (newScale >= 0.5 && newScale <= 5) {
+          scale.setValue(newScale);
+        }
+      }
+    }
+  );
+
+  const onPinchHandlerStateChange = (event) => {
+    if (event.nativeEvent.oldState === State.BEGAN) {
+      // Save the current scale as the base for this pinch gesture
+      pinchBase.current = lastScale.current;
+    }
+    else if (event.nativeEvent.oldState === State.ACTIVE) {
+      // Update the last scale
+      const newScale = pinchBase.current * event.nativeEvent.scale;
+      lastScale.current = Math.max(0.5, Math.min(5, newScale));
+      
+      // If scaled below 1.1, snap back to 1
+      if (lastScale.current < 1.1) {
+        Animated.parallel([
+          Animated.spring(scale, {
+            toValue: 1,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true
+          }),
+          Animated.spring(translateX, {
+            toValue: 0,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true
+          }),
+          Animated.spring(translateY, {
+            toValue: 0,
+            friction: 7,
+            tension: 40,
+            useNativeDriver: true
+          })
+        ]).start();
+        
+        lastScale.current = 1;
+        lastTranslateX.current = 0;
+        lastTranslateY.current = 0;
+      }
+    }
+  };
+
+  // Handle pan gesture
+  const onPanGestureEvent = Animated.event(
+    [{ 
+      nativeEvent: { 
+        translationX: translateX,
+        translationY: translateY 
+      } 
+    }],
+    { 
+      useNativeDriver: true,
+      listener: (event) => {
+        // Only apply translation if zoomed in
+        if (lastScale.current > 1) {
+          // Calculate the new translations
+          const newTranslateX = lastTranslateX.current + event.nativeEvent.translationX;
+          const newTranslateY = lastTranslateY.current + event.nativeEvent.translationY;
+          
+          // Calculate boundaries based on scale
+          const maxTranslateX = (width * (lastScale.current - 1)) / 2;
+          const maxTranslateY = (height * (lastScale.current - 1)) / 2;
+          
+          // Apply boundaries
+          if (Math.abs(newTranslateX) <= maxTranslateX) {
+            translateX.setValue(event.nativeEvent.translationX);
+          }
+          
+          if (Math.abs(newTranslateY) <= maxTranslateY) {
+            translateY.setValue(event.nativeEvent.translationY);
+          }
+        }
+      }
+    }
+  );
+
+  const onPanHandlerStateChange = (event) => {
+    if (event.nativeEvent.oldState === State.ACTIVE) {
+      // Update the last translations
+      lastTranslateX.current += event.nativeEvent.translationX;
+      lastTranslateY.current += event.nativeEvent.translationY;
+      
+      // Calculate boundaries based on scale
+      const maxTranslateX = (width * (lastScale.current - 1)) / 2;
+      const maxTranslateY = (height * (lastScale.current - 1)) / 2;
+      
+      // Enforce boundaries
+      if (Math.abs(lastTranslateX.current) > maxTranslateX) {
+        lastTranslateX.current = lastTranslateX.current > 0 ? maxTranslateX : -maxTranslateX;
+        Animated.spring(translateX, {
+          toValue: lastTranslateX.current,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true
+        }).start();
+      }
+      
+      if (Math.abs(lastTranslateY.current) > maxTranslateY) {
+        lastTranslateY.current = lastTranslateY.current > 0 ? maxTranslateY : -maxTranslateY;
+        Animated.spring(translateY, {
+          toValue: lastTranslateY.current,
+          friction: 7,
+          tension: 40,
+          useNativeDriver: true
+        }).start();
+      }
+      
+      // Reset the animated values for the next gesture
+      translateX.setValue(lastTranslateX.current);
+      translateY.setValue(lastTranslateY.current);
+    }
+  };
+
+  const renderImage = (item) => {
+    return (
+      <GestureHandlerRootView style={styles.mediaContainer}>
+        <PinchGestureHandler
+          onGestureEvent={onPinchGestureEvent}
+          onHandlerStateChange={onPinchHandlerStateChange}
+        >
+          <Animated.View style={styles.mediaWrapper}>
+            <PanGestureHandler
+              onGestureEvent={onPanGestureEvent}
+              onHandlerStateChange={onPanHandlerStateChange}
+              enabled={lastScale.current > 1}
+              avgTouches
+            >
+              <Animated.View style={styles.mediaWrapper}>
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={handleImageTap}
+                  style={styles.touchableImage}
+                >
+                  <Animated.Image
+                    source={{ uri: item.url }}
+                    style={[
+                      styles.media,
+                      { 
+                        transform: [
+                          { translateX },
+                          { translateY },
+                          { scale }
+                        ] 
+                      }
+                    ]}
+                    resizeMode="contain"
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+            </PanGestureHandler>
+          </Animated.View>
+        </PinchGestureHandler>
+      </GestureHandlerRootView>
+    );
+  };
+
   const renderItem = ({ item, index }) => {
-    // Create the transform style for zooming and panning
-    const imageTransform = [
-      { translateX: pan.x },
-      { translateY: pan.y },
-      { scale: pinchScale }
-    ];
+    // Reset transformation when changing slides
+    if (index !== currentIndex) {
+      resetTransformations();
+    }
     
     if (item.type === 'video' || item.url?.endsWith('.mp4')) {
       return (
@@ -265,28 +397,8 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
       );
     }
     
-    // Default to image with zoom capability
-    return (
-      <View 
-        style={styles.mediaContainer}
-        {...(index === currentIndex ? panResponder.panHandlers : {})}
-      >
-        <TouchableOpacity
-          activeOpacity={1}
-          style={styles.zoomableContainer}
-          onPress={handleImageTap}
-        >
-          <Animated.Image
-            source={{ uri: item.url }}
-            style={[
-              styles.media,
-              { transform: index === currentIndex ? imageTransform : [] }
-            ]}
-            resizeMode="contain"
-          />
-        </TouchableOpacity>
-      </View>
-    );
+    // Image with zoom capabilities
+    return renderImage(item);
   };
 
   // Handle scroll end to update current index
@@ -294,6 +406,8 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
     if (newIndex !== currentIndex) {
       setCurrentIndex(newIndex);
+      resetTransformations();
+      
       // Stop video if playing when scrolling away
       if (videoRef.current) {
         videoRef.current.stopAsync();
@@ -303,7 +417,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     }
   };
 
-  if (!Array.isArray(media)) return null;
+  if (mediaArray.length === 0) return null;
 
   return (
     <Modal
@@ -313,57 +427,61 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
       onRequestClose={handleClose}
     >
       <StatusBar barStyle="light-content" />
-      <Animated.View 
-        style={[
-          styles.container,
-          { opacity: fadeAnim }
-        ]}
-      >
-        <SafeAreaView style={styles.safeArea}>
-          <View style={styles.header}>
-            <TouchableOpacity 
-              style={styles.closeButton} 
-              onPress={handleClose}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-            >
-              <Ionicons name="close" size={28} color="#FFFFFF" />
-            </TouchableOpacity>
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <Animated.View 
+          style={[
+            styles.container,
+            { opacity: fadeAnim }
+          ]}
+        >
+          <SafeAreaView style={styles.safeArea}>
+            <View style={styles.header}>
+              <TouchableOpacity 
+                style={styles.closeButton} 
+                onPress={handleClose}
+                hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              >
+                <Ionicons name="close" size={28} color="#FFFFFF" />
+              </TouchableOpacity>
+              
+              {mediaArray.length > 1 && (
+                <View style={styles.mediaCounter}>
+                  <Text style={styles.mediaCounterText}>
+                    {currentIndex + 1} / {mediaArray.length}
+                  </Text>
+                </View>
+              )}
+            </View>
             
-            <View style={styles.mediaCounter}>
-              <Text style={styles.mediaCounterText}>
-                {currentIndex + 1} / {media.length}
-              </Text>
-            </View>
-          </View>
-          
-          <FlatList
-            ref={flatListRef}
-            data={media}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={initialIndex}
-            getItemLayout={(data, index) => ({
-              length: width,
-              offset: width * index,
-              index,
-            })}
-            scrollEnabled={scale === 1} // Disable scrolling when zoomed
-            onMomentumScrollEnd={handleScrollEnd}
-            renderItem={renderItem}
-            keyExtractor={(item, index) => `media-${index}`}
-          />
-          
-          {/* Zoom instruction indicator */}
-          {media[currentIndex]?.type !== 'video' && !media[currentIndex]?.url?.endsWith('.mp4') && (
-            <View style={styles.zoomInstructionContainer}>
-              <Text style={styles.zoomInstructionText}>
-                Double-tap to zoom
-              </Text>
-            </View>
-          )}
-        </SafeAreaView>
-      </Animated.View>
+            <FlatList
+              ref={flatListRef}
+              data={mediaArray}
+              horizontal
+              pagingEnabled
+              scrollEnabled={lastScale.current <= 1}
+              showsHorizontalScrollIndicator={false}
+              initialScrollIndex={initialIndex}
+              getItemLayout={(data, index) => ({
+                length: width,
+                offset: width * index,
+                index,
+              })}
+              onMomentumScrollEnd={handleScrollEnd}
+              renderItem={renderItem}
+              keyExtractor={(item, index) => `media-${index}`}
+              onScrollToIndexFailed={(info) => {
+                const wait = new Promise(resolve => setTimeout(resolve, 500));
+                wait.then(() => {
+                  flatListRef.current?.scrollToIndex({ 
+                    index: info.index, 
+                    animated: false 
+                  });
+                });
+              }}
+            />
+          </SafeAreaView>
+        </Animated.View>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -413,9 +531,15 @@ const styles = StyleSheet.create({
     height: height,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  mediaWrapper: {
+    width: width,
+    height: height,
+    alignItems: 'center',
+    justifyContent: 'center',
     overflow: 'hidden',
   },
-  zoomableContainer: {
+  touchableImage: {
     width: '100%',
     height: '100%',
     justifyContent: 'center',
@@ -425,31 +549,12 @@ const styles = StyleSheet.create({
     width: width * 0.98,
     height: height * 0.85,
     alignSelf: 'center',
-    resizeMode: 'contain',
     borderRadius: 18,
-    backgroundColor: '#000',
+    backgroundColor: 'transparent',
   },
   playButtonContainer: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  zoomInstructionContainer: {
-    position: 'absolute',
-    bottom: 30,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0.7,
-  },
-  zoomInstructionText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-  }
 });
