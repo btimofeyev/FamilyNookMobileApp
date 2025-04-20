@@ -1,5 +1,5 @@
 // app/components/MediaViewer.js
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { 
   View, 
   Modal, 
@@ -43,9 +43,6 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
   const lastTranslateX = useRef(0);
   const lastTranslateY = useRef(0);
   
-  // For pinch gesture base
-  const pinchBase = useRef(1);
-  
   // For double tap detection
   const lastTapRef = useRef(0);
   const lastTapTimeoutRef = useRef(null);
@@ -54,7 +51,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
   const mediaArray = Array.isArray(media) ? media : media ? [media] : [];
 
   // Reset to initial index when modal opens
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible) {
       setCurrentIndex(initialIndex);
       resetTransformations();
@@ -81,7 +78,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
   const handleClose = () => {
     // Stop video if playing
     if (videoRef.current) {
-      videoRef.current.stopAsync();
+      videoRef.current.stopAsync().catch(err => console.log('Error stopping video:', err));
     }
     
     // Play haptic feedback when closing the viewer
@@ -95,7 +92,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     }).start(() => onClose());
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible) {
       // Fade in animation when modal becomes visible
       Animated.timing(fadeAnim, {
@@ -182,14 +179,14 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     }
   };
 
-  // Handle pinch gesture
+  // FIXED: Improved pinch gesture handling
   const onPinchGestureEvent = Animated.event(
     [{ nativeEvent: { scale: scale } }],
     { 
       useNativeDriver: true,
       listener: (event) => {
-        // Apply the new scale based on the pinch gesture
-        const newScale = pinchBase.current * event.nativeEvent.scale;
+        // Apply the new scale based on the base scale and the current gesture
+        const newScale = lastScale.current * event.nativeEvent.scale;
         
         // Limit scale between 0.5 and 5
         if (newScale >= 0.5 && newScale <= 5) {
@@ -200,14 +197,10 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
   );
 
   const onPinchHandlerStateChange = (event) => {
-    if (event.nativeEvent.oldState === State.BEGAN) {
-      // Save the current scale as the base for this pinch gesture
-      pinchBase.current = lastScale.current;
-    }
-    else if (event.nativeEvent.oldState === State.ACTIVE) {
+    if (event.nativeEvent.oldState === State.ACTIVE) {
       // Update the last scale
-      const newScale = pinchBase.current * event.nativeEvent.scale;
-      lastScale.current = Math.max(0.5, Math.min(5, newScale));
+      lastScale.current *= event.nativeEvent.scale;
+      lastScale.current = Math.max(0.5, Math.min(5, lastScale.current));
       
       // If scaled below 1.1, snap back to 1
       if (lastScale.current < 1.1) {
@@ -236,10 +229,13 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
         lastTranslateX.current = 0;
         lastTranslateY.current = 0;
       }
+      
+      // Set the animated value to the accumulated scale
+      scale.setValue(lastScale.current);
     }
   };
 
-  // Handle pan gesture
+  // FIXED: Properly handling pan gestures 
   const onPanGestureEvent = Animated.event(
     [{ 
       nativeEvent: { 
@@ -250,61 +246,48 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     { 
       useNativeDriver: true,
       listener: (event) => {
-        // Only apply translation if zoomed in
-        if (lastScale.current > 1) {
-          // Calculate the new translations
-          const newTranslateX = lastTranslateX.current + event.nativeEvent.translationX;
-          const newTranslateY = lastTranslateY.current + event.nativeEvent.translationY;
-          
-          // Calculate boundaries based on scale
-          const maxTranslateX = (width * (lastScale.current - 1)) / 2;
-          const maxTranslateY = (height * (lastScale.current - 1)) / 2;
-          
-          // Apply boundaries
-          if (Math.abs(newTranslateX) <= maxTranslateX) {
-            translateX.setValue(event.nativeEvent.translationX);
-          }
-          
-          if (Math.abs(newTranslateY) <= maxTranslateY) {
-            translateY.setValue(event.nativeEvent.translationY);
-          }
-        }
+        if (lastScale.current <= 1) return; // Only allow panning when zoomed in
+        
+        // Calculate the maximum allowed pan distances based on current scale
+        const maxTranslateX = (width * (lastScale.current - 1)) / 2;
+        const maxTranslateY = (height * (lastScale.current - 1)) / 2;
+        
+        // Calculate new positions
+        let newTranslateX = lastTranslateX.current + event.nativeEvent.translationX;
+        let newTranslateY = lastTranslateY.current + event.nativeEvent.translationY;
+        
+        // Apply constraints
+        newTranslateX = Math.max(-maxTranslateX, Math.min(maxTranslateX, newTranslateX));
+        newTranslateY = Math.max(-maxTranslateY, Math.min(maxTranslateY, newTranslateY));
+        
+        // Update the animated values
+        translateX.setValue(newTranslateX);
+        translateY.setValue(newTranslateY);
       }
     }
   );
 
   const onPanHandlerStateChange = (event) => {
     if (event.nativeEvent.oldState === State.ACTIVE) {
-      // Update the last translations
+      // Only handle panning when zoomed in
+      if (lastScale.current <= 1) return; 
+      
+      // Update the accumulated translations
       lastTranslateX.current += event.nativeEvent.translationX;
       lastTranslateY.current += event.nativeEvent.translationY;
       
-      // Calculate boundaries based on scale
+      // Apply constraints
       const maxTranslateX = (width * (lastScale.current - 1)) / 2;
       const maxTranslateY = (height * (lastScale.current - 1)) / 2;
       
-      // Enforce boundaries
-      if (Math.abs(lastTranslateX.current) > maxTranslateX) {
-        lastTranslateX.current = lastTranslateX.current > 0 ? maxTranslateX : -maxTranslateX;
-        Animated.spring(translateX, {
-          toValue: lastTranslateX.current,
-          friction: 7,
-          tension: 40,
-          useNativeDriver: true
-        }).start();
-      }
-      
-      if (Math.abs(lastTranslateY.current) > maxTranslateY) {
-        lastTranslateY.current = lastTranslateY.current > 0 ? maxTranslateY : -maxTranslateY;
-        Animated.spring(translateY, {
-          toValue: lastTranslateY.current,
-          friction: 7,
-          tension: 40,
-          useNativeDriver: true
-        }).start();
-      }
+      lastTranslateX.current = Math.max(-maxTranslateX, Math.min(maxTranslateX, lastTranslateX.current));
+      lastTranslateY.current = Math.max(-maxTranslateY, Math.min(maxTranslateY, lastTranslateY.current));
       
       // Reset the animated values for the next gesture
+      translateX.setValue(lastTranslateX.current);
+      translateY.setValue(lastTranslateY.current);
+    } else if (event.nativeEvent.state === State.BEGAN) {
+      // Reset translation values when starting a new pan gesture
       translateX.setValue(lastTranslateX.current);
       translateY.setValue(lastTranslateY.current);
     }
@@ -336,9 +319,9 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
                       styles.media,
                       { 
                         transform: [
+                          { scale },
                           { translateX },
-                          { translateY },
-                          { scale }
+                          { translateY }
                         ] 
                       }
                     ]}
@@ -353,40 +336,45 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     );
   };
 
+  // FIXED: Improved video rendering and state management
   const renderItem = ({ item, index }) => {
     // Reset transformation when changing slides
     if (index !== currentIndex) {
       resetTransformations();
     }
     
-    if (item.type === 'video' || item.url?.endsWith('.mp4')) {
+    const isVideo = item.type === 'video' || item.url?.endsWith('.mp4') || item.url?.endsWith('.mov');
+    
+    if (isVideo) {
       return (
         <TouchableOpacity 
           activeOpacity={1} 
           style={styles.mediaContainer}
           onPress={() => {
-            if (videoRef.current) {
-              if (isPlaying) {
-                videoRef.current.pauseAsync();
+            if (index === currentIndex && videoRef.current) {
+              const newPlayingState = !isPlaying;
+              if (newPlayingState) {
+                videoRef.current.playAsync().catch(err => console.log('Error playing video:', err));
               } else {
-                videoRef.current.playAsync();
+                videoRef.current.pauseAsync().catch(err => console.log('Error pausing video:', err));
               }
-              setIsPlaying(!isPlaying);
+              setIsPlaying(newPlayingState);
             }
           }}
         >
           <Video
-            ref={index === currentIndex ? videoRef : null}
+            ref={videoRef}
             source={{ uri: item.url }}
             style={styles.media}
             resizeMode="contain"
             shouldPlay={false}
             isLooping={true}
-            onPlaybackStatusUpdate={status => {
+            onPlaybackStatusUpdate={(status) => {
               if (index === currentIndex) {
                 setIsPlaying(status.isPlaying);
               }
             }}
+            useNativeControls={false}
           />
           {!isPlaying && (
             <View style={styles.playButtonContainer}>
@@ -409,8 +397,8 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
       resetTransformations();
       
       // Stop video if playing when scrolling away
-      if (videoRef.current) {
-        videoRef.current.stopAsync();
+      if (isPlaying && videoRef.current) {
+        videoRef.current.stopAsync().catch(err => console.log('Error stopping video:', err));
         setIsPlaying(false);
       }
       Haptics.selectionAsync();
