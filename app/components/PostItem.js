@@ -362,7 +362,9 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
   const renderPostMedia = () => {
     const mediaItems = getPostMediaItems(post);
     if (!mediaItems.length) return null;
-
+    console.log(`Media items for post ${post.post_id}:`, 
+      mediaItems.map(item => ({url: item.url?.substring(0, 50) + '...', type: item.type}))
+    );
     const gridPadding = 40; // matches your margin calculations
     const gridGutter = 4;   // gutter between items
     const gridWidth = width - gridPadding;
@@ -392,6 +394,8 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
                   resizeMode="cover"
                   shouldPlay={false}
                   isMuted={true}
+                  onError={e => console.log('Video failed to load', mediaItems[0].url, e)}
+                  onLoad={() => console.log('Video loaded', mediaItems[0].url)}
                 />
                 <View style={styles.playIconContainer}>
                   <Ionicons name="play-circle" size={24} color="rgba(255, 255, 255, 0.8)" />
@@ -402,6 +406,8 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
                 source={{ uri: mediaItems[0].url }}
                 style={styles.gridMedia}
                 resizeMode="cover"
+                onError={e => console.log('Image failed to load', mediaItems[0].url, e.nativeEvent)}
+                onLoad={() => console.log('Image loaded', mediaItems[0].url)}
               />
             )}
           </TouchableOpacity>
@@ -437,6 +443,8 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
                     resizeMode="cover"
                     shouldPlay={false}
                     isMuted={true}
+                    onError={e => console.log('Video failed to load', item.url, e)}
+                    onLoad={() => console.log('Video loaded', item.url)}
                   />
                   <View style={styles.playIconContainer}>
                     <Ionicons name="play-circle" size={24} color="rgba(255, 255, 255, 0.8)" />
@@ -447,6 +455,8 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
                   source={{ uri: item.url }}
                   style={styles.gridMedia}
                   resizeMode="cover"
+                  onError={e => console.log('Image failed to load', item.url, e.nativeEvent)}
+                  onLoad={() => console.log('Image loaded', item.url)}
                 />
               )}
               {isLastItem && (

@@ -150,7 +150,7 @@ export const createPost = async (familyId, data) => {
   
   try {
     // Validate data before sending
-    if (!data || (!data.caption && !data.mediaUrls && !data.mediaUrls?.length === 0)) {
+      if (!data || (!data.caption && (!data.media || data.media.length === 0))) {
       throw new FeedServiceError(
         'Post must contain text or media',
         ErrorCodes.VALIDATION_ERROR
@@ -164,11 +164,9 @@ export const createPost = async (familyId, data) => {
     };
     
     // If we have media URLs that were already uploaded to R2
-    if (data.mediaUrls && data.mediaUrls.length > 0) {
-      payload.mediaUrls = data.mediaUrls;
-      if (data.mediaTypes) {
-        payload.mediaTypes = data.mediaTypes;
-      }
+    if (data.media && data.media.length) {
+      payload.media = data.media;
+      
     }
     
     // New endpoint to create posts with already-uploaded media

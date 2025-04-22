@@ -17,7 +17,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { createPost } from '../api/feedService';
-import MediaService from '../utils/mediaService';
 import MediaPickerModal from './shared/MediaPickerModal';
 
 const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
@@ -41,7 +40,8 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
             id: `media-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
             mediaUrl: item.fileUrl,
             mediaType: item.type?.startsWith('video/') ? 'video' : 'image',
-            mediaKey: item.key
+            mediaKey: item.key,
+            uploadId : item.uploadId 
           });
         }
       });
@@ -71,11 +71,13 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
       };
 
       // Only if we have uploaded media, add it to the post data
-      if (mediaItems.length > 0) {
-        // Format media for the backend API
-        postData.mediaUrls = mediaItems.map(media => media.mediaUrl);
-        postData.mediaTypes = mediaItems.map(media => media.mediaType);
-      }
+       if (mediaItems.length) {
+         postData.media = mediaItems.map(m => ({
+            uploadId : m.uploadId,
+            url      : m.mediaUrl,
+            type     : m.mediaType           // 'image' | 'video'
+          }));
+         }
 
       // Send to API
       const response = await createPost(familyId, postData);
