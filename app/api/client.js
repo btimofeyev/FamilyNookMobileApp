@@ -1,18 +1,14 @@
+//app/api/client.js
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { API_URL } from '@env';
 
-// Use environment variable with fallback
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
-// Keep track of refresh token promise to prevent multiple calls
 let refreshTokenPromise = null;
-
-// Track retry attempts
 let refreshRetryCount = 0;
 const MAX_REFRESH_RETRIES = 5;
 
-// Event to notify subscribers about auth state changes
 export const authEvents = {
   listeners: new Set(),
   subscribe(callback) {
@@ -32,10 +28,8 @@ const apiClient = axios.create({
   timeout: 15000,
 });
 
-// Request interceptor to add authentication token
 apiClient.interceptors.request.use(
   async (config) => {
-    // Skip auth for certain endpoints
     if (config.url === '/api/auth/refresh-token' || 
         config.url === '/api/auth/login' ||
         config.url === '/api/auth/register' ||
@@ -50,20 +44,15 @@ apiClient.interceptors.request.use(
     return config;
   },
   (error) => {
-    console.error('Request setup error:', error.message);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor to handle auth errors and token refresh
 apiClient.interceptors.response.use(
   (response) => {
     return response;
   },
   async (error) => {
-    console.error(`API Error (${error.config?.url}):`, error.message);
-    
-    // Skip retry logic for specific endpoints
     const skipRetryUrls = [
       '/api/auth/login', 
       '/api/auth/register', 
@@ -73,17 +62,14 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
     const requestUrl = originalRequest?.url || '';
     
-    // Handle 401/403 errors that need token refresh
     if ((error.response?.status === 401 || error.response?.status === 403) && 
         !originalRequest._retry && 
         !skipRetryUrls.some(url => requestUrl.includes(url))) {
   
-      // Check if this is a new account in setup phase
       const registrationTime = await SecureStore.getItemAsync('registration_time');
       const isRecentRegistration = registrationTime && 
-        (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000; // 5 minutes
+        (Date.now() - parseInt(registrationTime)) < 5 * 60 * 1000;
       
-      // If this is a recent registration, don't attempt refresh
       if (isRecentRegistration) {
         return Promise.reject(error);
       }
@@ -91,11 +77,9 @@ apiClient.interceptors.response.use(
       originalRequest._retry = true;
           
       try {
-        // Only try to refresh if we haven't reached MAX_REFRESH_RETRIES
         if (refreshRetryCount < MAX_REFRESH_RETRIES) {
           refreshRetryCount++;
           
-          // If a refresh is already in progress, wait for that instead of starting a new one
           if (!refreshTokenPromise) {
             refreshTokenPromise = (async () => {
               try {
@@ -109,7 +93,6 @@ apiClient.interceptors.response.use(
                   throw new Error('No refresh token available');
                 }
                 
-                // Make direct request to avoid interceptors
                 const response = await axios.post(
                   `${API_ENDPOINT}/api/auth/refresh-token`, 
                   { refreshToken }, 
@@ -125,18 +108,14 @@ apiClient.interceptors.response.use(
                 
                 const { token, refreshToken: newRefreshToken } = response.data;
                 
-                // Store the new access token
                 await SecureStore.setItemAsync('auth_token', token);
                 
-                // Store the new refresh token if provided
                 if (newRefreshToken) {
                   await SecureStore.setItemAsync('refresh_token', newRefreshToken);
                 }
                 
-                // Reset failed refresh state
                 refreshRetryCount = 0;
                 
-                // Notify listeners about successful token refresh
                 authEvents.emit({ type: 'token_refreshed', token });
                 
                 return token;
@@ -155,13 +134,10 @@ apiClient.interceptors.response.use(
           }
           
           try {
-            // Wait for the refresh token operation to complete
             const newToken = await refreshTokenPromise;
             
-            // Update the failed request with the new token
             originalRequest.headers.Authorization = `Bearer ${newToken}`;
             
-            // Retry the original request with the new token
             return axios(originalRequest);
           } catch (waitError) {
             throw waitError;
@@ -182,7 +158,6 @@ apiClient.interceptors.response.use(
       }
     }
     
-    // Special handling for family membership errors
     if (error.response?.status === 403 && error.response.data?.error?.includes('not a member of this family')) {
       authEvents.emit({ 
         type: 'family_access_denied', 
@@ -194,7 +169,6 @@ apiClient.interceptors.response.use(
   }
 );
 
-// Reset auth state resets retry count too
 export const resetAuthState = () => {
   refreshRetryCount = 0;
 };
