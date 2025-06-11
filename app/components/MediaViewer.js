@@ -1,4 +1,3 @@
-// app/components/MediaViewer.js
 import React, { useRef, useState, useEffect } from 'react';
 import { 
   View, 
@@ -179,7 +178,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     }
   };
 
-  // FIXED: Improved pinch gesture handling
+  // Pinch gesture handling
   const onPinchGestureEvent = Animated.event(
     [{ nativeEvent: { scale: scale } }],
     { 
@@ -235,7 +234,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     }
   };
 
-  // FIXED: Properly handling pan gestures 
+  // Pan gesture handling
   const onPanGestureEvent = Animated.event(
     [{ 
       nativeEvent: { 
@@ -336,7 +335,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
     );
   };
 
-  // FIXED: Improved video rendering and state management
+  // Video rendering
   const renderItem = ({ item, index }) => {
     // Reset transformation when changing slides
     if (index !== currentIndex) {
@@ -423,7 +422,8 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
           ]}
         >
           <SafeAreaView style={styles.safeArea}>
-            <View style={styles.header}>
+            {/* Close button container - Fixed: Positioned to be easily accessible */}
+            <View style={styles.closeButtonContainer}>
               <TouchableOpacity 
                 style={styles.closeButton} 
                 onPress={handleClose}
@@ -431,15 +431,18 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
               >
                 <Ionicons name="close" size={28} color="#FFFFFF" />
               </TouchableOpacity>
-              
-              {mediaArray.length > 1 && (
+            </View>
+            
+            {/* Media counter - Fixed: Positioned separately from close button */}
+            {mediaArray.length > 1 && (
+              <View style={styles.mediaCounterContainer}>
                 <View style={styles.mediaCounter}>
                   <Text style={styles.mediaCounterText}>
                     {currentIndex + 1} / {mediaArray.length}
                   </Text>
                 </View>
-              )}
-            </View>
+              </View>
+            )}
             
             <FlatList
               ref={flatListRef}
@@ -482,16 +485,17 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 16,
+  // Fixed: Separate containers for close button and media counter
+  closeButtonContainer: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+    top: Platform.OS === 'ios' ? 50 : 30, // Fixed: Increased top margin for iOS
+    left: 16,
+    zIndex: 10,
+  },
+  mediaCounterContainer: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 50 : 30, // Fixed: Increased top margin for iOS
+    right: 16,
     zIndex: 10,
   },
   closeButton: {

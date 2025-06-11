@@ -1,5 +1,8 @@
-// app/components/PostItem.js
+
+// app/components/PostItem.js - Updated with edit functionality
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { router } from 'expo-router';
+
 import { 
   View, 
   Text, 
@@ -12,7 +15,8 @@ import {
   Platform,
   Linking,
   Modal,
-  FlatList
+  FlatList,
+  TouchableWithoutFeedback
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -30,6 +34,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
   const [liked, setLiked] = useState(post.is_liked || false);
   const [likesCount, setLikesCount] = useState(parseInt(post.likes_count || 0, 10));
   const [showComments, setShowComments] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [mediaViewerVisible, setMediaViewerVisible] = useState(false);
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -137,7 +142,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
   };
   
   // Only register like if it was a deliberate tap, not scrolling
-  const handleTouchEnd = useCallback((event) => {
+  const handleTouchEnd = useCallback(() => {
     if (isPerformingActionRef.current) return;
     
     const touchEndTime = Date.now();
@@ -151,7 +156,7 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
     // Reset refs
     touchStartTimeRef.current = null;
     touchMoveDetectedRef.current = false;
-  }, [handleLike]);
+  }, []);
 
   const handleLike = async () => {
     if (isLoading || isPerformingActionRef.current) return;
@@ -249,7 +254,27 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
     lastTap.current = now;
   };
 
-  const handleDelete = () => {
+  // Handle opening options menu
+  const handleOptionsPress = () => {
+    setShowOptions(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  };
+
+  // Handle edit post action
+  const handleEditPost = () => {
+    setShowOptions(false); // Close the options menu
+    
+    // Navigate to the edit post screen with the post ID
+    router.push({
+      pathname: '/edit-post',
+      params: { postId: post.post_id }
+    });
+  };
+
+  // Handle delete post action
+  const confirmDelete = () => {
+    setShowOptions(false); // Close the options menu
+    
     Alert.alert(
       "Delete Post",
       "Are you sure you want to delete this post?",
@@ -261,7 +286,8 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
           onPress: async () => {
             try {
               await deletePost(post.post_id);
-              onUpdate && onUpdate();
+              onUpdate && onUpdate(null, true); // true indicates post was deleted
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             } catch (error) {
               console.error('Error deleting post:', error);
               Alert.alert('Error', 'Failed to delete post');
@@ -270,6 +296,67 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
         }
       ],
       { userInterfaceStyle: 'dark' } // Force dark mode for the alert
+    );
+  };
+
+  // Render options menu
+  const renderOptionsMenu = () => {
+    const options = [
+      // Only show these options if the current user is the post author
+      ...(isCurrentUser ? [
+        { 
+          label: 'Edit Post', 
+          icon: 'create-outline', 
+          onPress: handleEditPost,
+          isEdit: true // Flag to identify the edit option
+        },
+        { 
+          label: 'Delete Post', 
+          icon: 'trash-outline', 
+          onPress: confirmDelete,
+          isDelete: true // Flag to identify the delete option
+        }
+      ] : []),
+      { 
+        label: 'Cancel', 
+        icon: 'close-circle-outline', 
+        onPress: () => setShowOptions(false) 
+      },
+    ];
+    
+    return (
+      <Modal
+        visible={showOptions}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowOptions(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setShowOptions(false)}>
+          <View style={styles.modalOverlay}>
+            <BlurView intensity={30} tint="dark" style={styles.optionsContainer}>
+              {options.map((option, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.optionItem}
+                  onPress={option.onPress}
+                >
+                  <Ionicons 
+                    name={option.icon} 
+                    size={24} 
+                    color={option.label === 'Delete Post' ? '#FF453A' : '#F5F5F7'} 
+                  />
+                  <Text style={[
+                    styles.optionText,
+                    option.label === 'Delete Post' && styles.deleteText
+                  ]}>
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </BlurView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
     );
   };
 
@@ -589,8 +676,8 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
         
         {isCurrentUser && (
           <TouchableOpacity 
-            onPress={handleDelete} 
-            style={styles.deleteButton}
+            onPress={handleOptionsPress} 
+            style={styles.optionsButton}
             hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
           >
             <Ionicons name="ellipsis-horizontal" size={20} color="#8E8E93" />
@@ -674,10 +761,10 @@ export default function PostItem({ post, onUpdate, isCurrentUser }) {
       />
       
       {renderYoutubeModal()}
+      {renderOptionsMenu()}
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   container: {
     backgroundColor: '#121212', // Onyx Black background
@@ -717,6 +804,73 @@ const styles = StyleSheet.create({
     padding: 6,
     borderRadius: 12,
     backgroundColor: 'rgba(59, 175, 188, 0.08)', // Very subtle teal
+  },
+  optionsButton: {
+    padding: 8,
+    borderRadius: 16,
+    backgroundColor: 'rgba(59, 175, 188, 0.08)', // Very subtle teal background
+  },
+  
+  // Options modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  optionsContainer: {
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    overflow: 'hidden',
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    backgroundColor: 'rgba(24, 24, 26, 0.97)', // Fallback color
+  },
+  optionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(60, 60, 67, 0.2)', // Subtle divider
+  },
+  optionText: {
+    fontSize: 16,
+    color: '#F5F5F7',
+    marginLeft: 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  deleteText: {
+    color: '#FF453A', // iOS system red
+  },
+  
+  // Add specific styling for the edit button in the options menu
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  editButtonIcon: {
+    color: '#3BAFBC', // Teal glow color
+  },
+  editButtonText: {
+    color: '#3BAFBC',
+    fontWeight: '500',
+  },
+  
+  // Styling for when the edit button appears directly in the post header
+  editButtonDirect: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(59, 175, 188, 0.12)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 16,
+    marginLeft: 8,
+  },
+  editButtonDirectText: {
+    color: '#3BAFBC',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   caption: {
     fontSize: 15,

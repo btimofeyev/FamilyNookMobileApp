@@ -246,7 +246,68 @@ export const getFamilyPosts = async (familyId, page = 1) => {
     throw handleApiError(error, 'Failed to load posts');
   }
 };
+export const updatePost = async (postId, updateData) => {
+  if (!postId) {
+    throw new FeedServiceError(
+      'Post ID is required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
+  try {
+    // For the update operation, we only need caption and/or new media items
+    const payload = {};
+    
+    if (updateData.caption !== undefined) {
+      payload.caption = updateData.caption;
+    }
+    
+    if (updateData.media && Array.isArray(updateData.media)) {
+      payload.media = updateData.media;
+    }
+    
+    const response = await apiClient.put(`/api/posts/${postId}`, payload);
+    
+    return response.data;
+  } catch (error) {
+    throw handleApiError(error, 'Failed to update post');
+  }
+};
 
+// Get a specific post
+export const getPost = async (postId) => {
+  if (!postId) {
+    throw new FeedServiceError(
+      'Post ID is required',
+      ErrorCodes.VALIDATION_ERROR
+    );
+  }
+  
+  try {
+    const response = await apiClient.get(`/api/posts/${postId}`);
+    
+    if (!response.data) {
+      throw new FeedServiceError(
+        'Post not found',
+        ErrorCodes.NOT_FOUND
+      );
+    }
+    
+    // Get the liked state from local storage
+    const likedPostsMap = await getLikedPostsMap();
+    const isLocallyLiked = !!likedPostsMap[postId.toString()];
+    
+    // Return post with correct like state
+    return {
+      ...response.data,
+      is_liked: isLocallyLiked,
+      likes_count: parseInt(response.data.likes_count || 0, 10),
+      comments_count: parseInt(response.data.comments_count || 0, 10)
+    };
+  } catch (error) {
+    throw handleApiError(error, 'Failed to get post');
+  }
+};
 export const toggleLike = async (postId) => {
   if (!postId) {
     throw new FeedServiceError(
