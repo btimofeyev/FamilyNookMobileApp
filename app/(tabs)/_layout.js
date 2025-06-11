@@ -1,4 +1,4 @@
-// app/(tabs)/_layout.js
+// app/(tabs)/_layout.js - Updated with custom icons
 import React from 'react';
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { useNotifications } from '../../context/NotificationContext';
 import { BlurView } from 'expo-blur';
+import CustomTabIcon from '../components/CustomTabIcon';
 
 export default function TabsLayout() {
   const { unreadCount } = useNotifications();
@@ -63,10 +64,12 @@ export default function TabsLayout() {
             tabBarLabel: 'Feed',
             tabBarIcon: ({ color, size, focused }) => (
               <View style={styles.tabIconContainer}>
-                <Ionicons 
-                  name={focused ? "home" : "home-outline"} 
-                  size={size} 
-                  color={color} 
+                <CustomTabIcon
+                  source={require('../../assets/icons/feed-icon.png')} // Your colorful feed icon
+                  focused={focused}
+                  size={size}
+                  useTinting={false} // This preserves your colorful images
+                  opacity={0.5} // Unfocused opacity
                 />
               </View>
             ),
@@ -79,10 +82,12 @@ export default function TabsLayout() {
             tabBarLabel: 'Memories',
             tabBarIcon: ({ color, size, focused }) => (
               <View style={styles.tabIconContainer}>
-                <Ionicons 
-                  name={focused ? "images" : "images-outline"} 
-                  size={size} 
-                  color={color} 
+                <CustomTabIcon
+                  source={require('../../assets/icons/memories-icon.png')} // Your colorful memories icon
+                  focused={focused}
+                  size={size}
+                  useTinting={false} // This preserves your colorful images
+                  opacity={0.5} // Unfocused opacity
                 />
               </View>
             ),
@@ -95,10 +100,12 @@ export default function TabsLayout() {
             tabBarLabel: 'Profile',
             tabBarIcon: ({ color, size, focused }) => (
               <View style={styles.tabIconContainer}>
-                <Ionicons 
-                  name={focused ? "person" : "person-outline"} 
-                  size={size} 
-                  color={color} 
+                <CustomTabIcon
+                  source={require('../../assets/icons/profile-icon.png')} // Your colorful profile icon
+                  focused={focused}
+                  size={size}
+                  useTinting={false} // This preserves your colorful images
+                  opacity={0.5} // Unfocused opacity
                 />
               </View>
             ),
@@ -111,10 +118,12 @@ export default function TabsLayout() {
             tabBarLabel: 'Updates',
             tabBarIcon: ({ color, size, focused }) => (
               <View style={styles.notificationIconContainer}>
-                <Ionicons 
-                  name={focused ? "notifications" : "notifications-outline"} 
-                  size={size} 
-                  color={color} 
+                <CustomTabIcon
+                  source={require('../../assets/icons/notifications-icon.png')} // Your colorful notifications icon
+                  focused={focused}
+                  size={size}
+                  useTinting={false} // This preserves your colorful images
+                  opacity={0.5} // Unfocused opacity
                 />
                 {unreadCount > 0 && (
                   <View style={styles.notificationBadge}>
