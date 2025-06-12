@@ -25,7 +25,7 @@ import { getUserProfile, inviteToFamily } from '../api/userService';
 import { getFamilyPosts } from '../api/feedService';
 import { generateFamilyPasskey } from '../api/familyService';
 import { BlurView } from 'expo-blur';
-import PostItem from '../components/PostItem';
+import PostCard from '../components/PostCard';
 
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
@@ -454,7 +454,7 @@ export default function ProfileScreen() {
           {userPosts && userPosts.length > 0 ? (
             <>
               {userPosts.slice(0, 3).map((post) => (
-                <PostItem 
+                <PostCard
                   key={post.post_id}
                   post={post}
                   isCurrentUser={true}

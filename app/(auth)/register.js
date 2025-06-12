@@ -1,319 +1,340 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Image, ScrollView, Platform, KeyboardAvoidingView } from 'react-native';
+import {
+    View,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    StyleSheet,
+    ActivityIndicator,
+    Image,
+    ScrollView,
+    Platform,
+    KeyboardAvoidingView
+} from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
 import { StatusBar } from 'expo-status-bar';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
+
+// Reusable component for the "Liquid Glass" input fields
+const LiquidInput = ({ label, icon, error, children }) => {
+    return (
+        <View style={styles.inputContainer}>
+            <Text style={styles.label}>{label}</Text>
+            <BlurView
+                intensity={80}
+                tint="light"
+                style={[styles.inputBlurView, error ? styles.inputError : null]}
+            >
+                <Ionicons name={icon} size={20} color="rgba(0, 0, 0, 0.5)" style={styles.inputIcon} />
+                {children}
+            </BlurView>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        </View>
+    );
+};
 
 export default function RegisterScreen() {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [nameError, setNameError] = useState('');
-  const [emailError, setEmailError] = useState('');
-  const [passwordError, setPasswordError] = useState('');
-  const [confirmPasswordError, setConfirmPasswordError] = useState('');
-  
-  const { register, loading, error } = useAuth();
-  const router = useRouter();
+    const [name, setName] = useState('');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [nameError, setNameError] = useState('');
+    const [emailError, setEmailError] = useState('');
+    const [passwordError, setPasswordError] = useState('');
+    const [confirmPasswordError, setConfirmPasswordError] = useState('');
 
-  const validateInputs = () => {
-    let isValid = true;
+    const { register, loading, error: authError } = useAuth();
+    const router = useRouter();
 
-    if (!name.trim()) {
-      setNameError('Name is required');
-      isValid = false;
-    } else {
-      setNameError('');
-    }
+    // --- All validation and handleRegister logic remains unchanged ---
+    const validateInputs = () => {
+        let isValid = true;
 
-    if (!email.trim()) {
-      setEmailError('Email is required');
-      isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError('Please enter a valid email');
-      isValid = false;
-    } else {
-      setEmailError('');
-    }
+        if (!name.trim()) {
+            setNameError('Name is required');
+            isValid = false;
+        } else {
+            setNameError('');
+        }
 
-    if (!password) {
-      setPasswordError('Password is required');
-      isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError('Password must be at least 6 characters');
-      isValid = false;
-    } else {
-      setPasswordError('');
-    }
+        if (!email.trim()) {
+            setEmailError('Email is required');
+            isValid = false;
+        } else if (!/\S+@\S+\.\S+/.test(email)) {
+            setEmailError('Please enter a valid email');
+            isValid = false;
+        } else {
+            setEmailError('');
+        }
 
-    if (password !== confirmPassword) {
-      setConfirmPasswordError('Passwords do not match');
-      isValid = false;
-    } else {
-      setConfirmPasswordError('');
-    }
+        if (!password) {
+            setPasswordError('Password is required');
+            isValid = false;
+        } else if (password.length < 6) {
+            setPasswordError('Password must be at least 6 characters');
+            isValid = false;
+        } else {
+            setPasswordError('');
+        }
 
-    return isValid;
-  };
+        if (password !== confirmPassword) {
+            setConfirmPasswordError('Passwords do not match');
+            isValid = false;
+        } else {
+            setConfirmPasswordError('');
+        }
 
-  const handleRegister = async () => {
-    if (!validateInputs()) return;
-    await register(name, email, password);
-  };
+        return isValid;
+    };
 
-  return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <StatusBar style="light" />
-      
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollViewContent}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <View style={styles.logoContainer}>
-          <Image 
-            source={require('../../assets/mainlogo.png')}
-            style={styles.logo} 
-            resizeMode="contain" 
-          />
-          <Text style={styles.appName}>FamlyNook</Text>
-          <Text style={styles.tagline}>Connecting families, one moment at a time</Text>
-        </View>
+    const handleRegister = async () => {
+        if (!validateInputs()) return;
+        await register(name, email, password);
+    };
 
-        <BlurView intensity={15} tint="dark" style={styles.formContainer}>
-          <Text style={styles.title}>Create Account</Text>
-          
-          {error && <Text style={styles.errorText}>{error}</Text>}
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Name</Text>
-            <TextInput
-              style={[styles.input, nameError ? styles.inputError : null]}
-              placeholder="Enter your full name"
-              placeholderTextColor="#8E8E93"
-              value={name}
-              onChangeText={setName}
-              selectionColor="#3BAFBC"
-              autoCorrect={false}
-            />
-            {nameError ? <Text style={styles.errorText}>{nameError}</Text> : null}
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={[styles.input, emailError ? styles.inputError : null]}
-              placeholder="Enter your email"
-              placeholderTextColor="#8E8E93"
-              value={email}
-              onChangeText={setEmail}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              selectionColor="#3BAFBC"
-              autoCorrect={false}
-            />
-            {emailError ? <Text style={styles.errorText}>{emailError}</Text> : null}
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={[styles.input, passwordError ? styles.inputError : null]}
-              placeholder="Create a password"
-              placeholderTextColor="#8E8E93"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              selectionColor="#3BAFBC"
-            />
-            {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-              style={[styles.input, confirmPasswordError ? styles.inputError : null]}
-              placeholder="Confirm your password"
-              placeholderTextColor="#8E8E93"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              selectionColor="#3BAFBC"
-            />
-            {confirmPasswordError ? <Text style={styles.errorText}>{confirmPasswordError}</Text> : null}
-          </View>
-
-          <TouchableOpacity 
-            style={styles.buttonContainer} 
-            onPress={handleRegister}
-            disabled={loading}
-            activeOpacity={0.8}
-          >
+    return (
+        <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={{ flex: 1 }}
+        >
+            <StatusBar style="dark" />
+            {/* --- NEW PASTEL GREEN GRADIENT --- */}
             <LinearGradient
-              colors={['#1E2B2F', '#3BAFBC']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.buttonGradient}
+                colors={['#d4fc79', '#96e6a1']}
+                style={styles.container}
             >
-              {loading ? (
-                <ActivityIndicator color="#F5F5F7" />
-              ) : (
-                <Text style={styles.buttonText}>Create Account</Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    <View style={styles.logoContainer}>
+                        <Image
+                            source={require('../../assets/mainlogo.png')}
+                            style={styles.logo}
+                            resizeMode="contain"
+                        />
+                        <Text style={styles.appName}>FamlyNook</Text>
+                        <Text style={styles.tagline}>Connecting families, one moment at a time</Text>
+                    </View>
 
-          <View style={styles.loginContainer}>
-            <Text style={styles.loginText}>Already have an account? </Text>
-            <Link href="/login" asChild>
-              <TouchableOpacity>
-                <Text style={styles.loginLink}>Sign In</Text>
-              </TouchableOpacity>
-            </Link>
-          </View>
-        </BlurView>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
+                    {/* --- UPDATED BLURVIEW FOR LIGHTER BACKGROUND --- */}
+                    <BlurView intensity={90} tint="light" style={styles.formContainer}>
+                        <Text style={styles.title}>Create Account</Text>
+
+                        {authError && <Text style={styles.authErrorText}>{authError}</Text>}
+
+                        <LiquidInput label="Full Name" icon="person-outline" error={nameError}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Enter your full name"
+                                placeholderTextColor="rgba(0, 0, 0, 0.4)"
+                                value={name}
+                                onChangeText={setName}
+                                autoCapitalize="words"
+                                selectionColor="rgba(0, 0, 0, 0.5)"
+                            />
+                        </LiquidInput>
+
+                        <LiquidInput label="Email" icon="mail-outline" error={emailError}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Enter your email"
+                                placeholderTextColor="rgba(0, 0, 0, 0.4)"
+                                value={email}
+                                onChangeText={setEmail}
+                                keyboardType="email-address"
+                                autoCapitalize="none"
+                                selectionColor="rgba(0, 0, 0, 0.5)"
+                            />
+                        </LiquidInput>
+
+                        <LiquidInput label="Password" icon="lock-closed-outline" error={passwordError}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Create a password"
+                                placeholderTextColor="rgba(0, 0, 0, 0.4)"
+                                value={password}
+                                onChangeText={setPassword}
+                                secureTextEntry
+                                selectionColor="rgba(0, 0, 0, 0.5)"
+                            />
+                        </LiquidInput>
+
+                        <LiquidInput label="Confirm Password" icon="lock-closed-outline" error={confirmPasswordError}>
+                            <TextInput
+                                style={styles.input}
+                                placeholder="Confirm your password"
+                                placeholderTextColor="rgba(0, 0, 0, 0.4)"
+                                value={confirmPassword}
+                                onChangeText={setConfirmPassword}
+                                secureTextEntry
+                                selectionColor="rgba(0, 0, 0, 0.5)"
+                            />
+                        </LiquidInput>
+
+                        <TouchableOpacity
+                            style={styles.buttonContainer}
+                            onPress={handleRegister}
+                            disabled={loading}
+                            activeOpacity={0.8}
+                        >
+                             {/* The button itself is now a solid, contrasting color for emphasis */}
+                            <LinearGradient
+                                colors={['#20bf55', '#01baef']}
+                                style={styles.buttonGradient}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator color="#FFFFFF" />
+                                ) : (
+                                    <Text style={styles.buttonText}>Create Account</Text>
+                                )}
+                            </LinearGradient>
+                        </TouchableOpacity>
+
+                        <View style={styles.signInContainer}>
+                            <Text style={styles.signInText}>Already have an account? </Text>
+                            <Link href="/login" asChild>
+                                <TouchableOpacity>
+                                    <Text style={styles.signInLink}>Sign In</Text>
+                                </TouchableOpacity>
+                            </Link>
+                        </View>
+                    </BlurView>
+                </ScrollView>
+            </LinearGradient>
+        </KeyboardAvoidingView>
+    );
 }
 
+// Styles optimized for a light, pastel green theme
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1E2B2F',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollViewContent: {
-    paddingBottom: 40,
-  },
-  logoContainer: {
-    alignItems: 'center',
-    marginTop: 50,
-    marginBottom: 30,
-    paddingHorizontal: 20,
-  },
-  logo: {
-    width: 100,
-    height: 100,
-  },
-  appName: {
-    fontSize: 28,
-    fontWeight: '700',
-    color: '#F5F5F7',
-    marginTop: 12,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
-    letterSpacing: -0.5,
-  },
-  tagline: {
-    fontSize: 16,
-    color: '#8E8E93',
-    marginTop: 8,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    letterSpacing: -0.2,
-  },
-  formContainer: {
-    marginHorizontal: 16,
-    borderRadius: 24,
-    paddingHorizontal: 24,
-    paddingTop: 32,
-    paddingBottom: 36,
-    backgroundColor: 'rgba(18, 18, 18, 0.85)',
-    overflow: 'hidden',
-    shadowColor: 'rgba(0, 0, 0, 0.8)',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 10,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '600',
-    marginBottom: 32,
-    color: '#F5F5F7',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
-    letterSpacing: -0.5,
-  },
-  inputContainer: {
-    marginBottom: 24,
-  },
-  label: {
-    fontSize: 16,
-    color: '#F5F5F7',
-    marginBottom: 8,
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-  },
-  input: {
-    height: 54,
-    borderWidth: 1,
-    borderColor: 'rgba(59, 175, 188, 0.3)',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    fontSize: 16,
-    backgroundColor: 'rgba(18, 18, 18, 0.6)',
-    color: '#F5F5F7',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    shadowColor: 'rgba(0, 0, 0, 0.3)',
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 4,
-    shadowOpacity: 0.1,
-  },
-  inputError: {
-    borderColor: '#FF453A',
-  },
-  errorText: {
-    color: '#FF453A',
-    fontSize: 14,
-    marginTop: 6,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-  },
-  buttonContainer: {
-    height: 54,
-    borderRadius: 12,
-    overflow: 'hidden',
-    marginTop: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    elevation: 5,
-  },
-  buttonGradient: {
-    height: '100%',
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  buttonText: {
-    color: '#F5F5F7',
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    letterSpacing: -0.2,
-  },
-  loginContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 32,
-  },
-  loginText: {
-    fontSize: 15,
-    color: '#8E8E93',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-  },
-  loginLink: {
-    fontSize: 15,
-    color: '#3BAFBC',
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-  },
+    container: {
+        flex: 1,
+    },
+    scrollContent: {
+        flexGrow: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: 60,
+        paddingHorizontal: 20,
+    },
+    logoContainer: {
+        alignItems: 'center',
+        marginBottom: 30,
+    },
+    logo: {
+        width: 100,
+        height: 100,
+    },
+    appName: {
+        fontSize: 42,
+        fontWeight: 'bold',
+        color: '#2c5b2f', // Dark green for contrast
+        marginTop: 16,
+        textShadowColor: 'rgba(255, 255, 255, 0.3)',
+        textShadowOffset: { width: 0, height: 2 },
+        textShadowRadius: 4,
+    },
+    tagline: {
+        fontSize: 16,
+        color: 'rgba(44, 91, 47, 0.8)', // Dark green for contrast
+        marginTop: 4,
+    },
+    formContainer: {
+        width: '100%',
+        padding: 24,
+        borderRadius: 25,
+        overflow: 'hidden',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    title: {
+        fontSize: 28,
+        fontWeight: 'bold',
+        marginBottom: 30,
+        color: '#000000',
+        textAlign: 'center',
+    },
+    authErrorText: {
+        color: '#D90429',
+        fontSize: 14,
+        textAlign: 'center',
+        marginBottom: 16,
+    },
+    inputContainer: {
+        marginBottom: 20,
+    },
+    label: {
+        fontSize: 14,
+        color: 'rgba(0, 0, 0, 0.6)',
+        marginBottom: 8,
+    },
+    inputBlurView: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        height: 54,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+        overflow: 'hidden',
+    },
+    inputIcon: {
+        paddingHorizontal: 12,
+    },
+    input: {
+        flex: 1,
+        height: '100%',
+        paddingRight: 16,
+        fontSize: 16,
+        color: '#000000',
+        backgroundColor: 'transparent',
+    },
+    inputError: {
+        borderColor: '#D90429',
+    },
+    errorText: {
+        color: '#D90429',
+        fontSize: 13,
+        marginTop: 6,
+    },
+    buttonContainer: {
+        height: 54,
+        marginTop: 20,
+        borderRadius: 27, // Pill shape
+        overflow: 'hidden', // Important for gradient border radius
+        shadowColor: '#96e6a1', // Pastel green glow
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.6,
+        shadowRadius: 10,
+        elevation: 12,
+    },
+    buttonGradient: {
+        height: '100%',
+        width: '100%',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    buttonText: {
+        color: '#FFFFFF',
+        fontSize: 16,
+        fontWeight: 'bold',
+    },
+    signInContainer: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginTop: 30,
+    },
+    signInText: {
+        fontSize: 15,
+        color: 'rgba(0, 0, 0, 0.6)',
+    },
+    signInLink: {
+        fontSize: 15,
+        color: '#20bf55', // Contrasting green
+        fontWeight: 'bold',
+    },
 });
