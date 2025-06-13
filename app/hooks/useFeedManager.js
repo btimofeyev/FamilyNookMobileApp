@@ -138,3 +138,6 @@ export const useFeedManager = () => {
     selectedFamily,
   };
 };
+
+const UseFeedManagerComponent = () => null;
+export default UseFeedManagerComponent;

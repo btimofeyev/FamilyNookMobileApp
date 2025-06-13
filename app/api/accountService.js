@@ -106,3 +106,6 @@ export const changePassword = async (passwordData) => {
     throw error;
   }
 };
+
+const AccountServiceComponent = () => null;
+export default AccountServiceComponent;

@@ -97,3 +97,6 @@ export const deleteMemory = async (memoryId) => {
     throw error;
   }
 };
+
+const MemoriesServiceComponent = () => null;
+export default MemoriesServiceComponent;

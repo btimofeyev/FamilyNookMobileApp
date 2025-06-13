@@ -110,3 +110,6 @@ export const subscribeToPushNotifications = async (pushToken) => {
     return { success: false, error: error.message };
   }
 };
+
+const NotificationServiceComponent = () => null;
+export default NotificationServiceComponent;

@@ -137,3 +137,6 @@ export const leaveFamilyGroup = async (familyId) => {
     throw error;
   }
 };
+
+const FamilyServiceComponent = () => null;
+export default FamilyServiceComponent;

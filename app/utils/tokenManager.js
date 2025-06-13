@@ -90,6 +90,7 @@ class TokenManager {
         const refreshToken = await SecureStorage.getRefreshToken();
         
         if (!refreshToken) {
+          console.log('TokenManager: No refresh token available - user may need to log in again');
           throw new Error('No refresh token available');
         }
         

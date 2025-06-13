@@ -46,7 +46,8 @@ export const AuthProvider = ({ children }) => {
           break;
           
         case 'refresh_failed':
-          if (event.retryCount && event.retryCount > 3) {
+          console.log('Auth refresh failed:', event.error?.message);
+          if (event.error?.message === 'No refresh token available' || (event.retryCount && event.retryCount > 3)) {
             handleSessionExpired();
           }
           break;

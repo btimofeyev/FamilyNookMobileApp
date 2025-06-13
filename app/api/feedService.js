@@ -446,3 +446,6 @@ export const Errors = {
   FeedServiceError,
   ErrorCodes
 };
+
+const FeedServiceComponent = () => null;
+export default FeedServiceComponent;

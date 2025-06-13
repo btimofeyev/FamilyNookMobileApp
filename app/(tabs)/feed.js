@@ -79,7 +79,7 @@ export default function FeedScreen() {
             const opacity = scrollY.interpolate({ inputRange, outputRange: [0.6, 1, 0.6], extrapolate: 'clamp' });
             return (
                 <Animated.View style={{ height: ITEM_HEIGHT, justifyContent: 'center', alignItems: 'center', opacity, transform: [{ scale }] }}>
-                  <PostCard post={item} onToggleLike={handleToggleLike} />
+                  <PostCard post={item} onToggleLike={handleToggleLike} onPostUpdate={handleRefresh} />
                 </Animated.View>
             );
         }}

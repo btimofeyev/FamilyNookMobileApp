@@ -85,6 +85,7 @@ apiClient.interceptors.response.use(
               try {
                 const refreshToken = await SecureStore.getItemAsync('refresh_token');
                 if (!refreshToken) {
+                  console.log('No refresh token available - user may need to log in again');
                   authEvents.emit({ 
                     type: 'refresh_failed', 
                     error: new Error('No refresh token available'),

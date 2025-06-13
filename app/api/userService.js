@@ -213,3 +213,6 @@ export const updateNotificationSettings = async (settings) => {
     throw error;
   }
 };
+
+const UserServiceComponent = () => null;
+export default UserServiceComponent;

@@ -6,6 +6,7 @@ import TimeAgo from './TimeAgo';
 import { BlurView } from 'expo-blur';
 import MemberAvatar from './MemberAvatar';
 import { LinearGradient } from 'expo-linear-gradient';
+import CommentsModal from './CommentsModal';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -14,8 +15,10 @@ const CARD_ASPECT_RATIO = 3 / 4.5;
 export const CARD_HEIGHT = CARD_WIDTH / CARD_ASPECT_RATIO;
 export const ITEM_LAYOUT_HEIGHT = CARD_HEIGHT + 40;
 
-const PostCard = ({ post, onToggleLike }) => {
+const PostCard = ({ post, onToggleLike, onPostUpdate }) => {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
+  const [showCommentsModal, setShowCommentsModal] = useState(false);
+  const [commentsCount, setCommentsCount] = useState(post?.comments_count || 0);
   const likeAnim = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -24,6 +27,21 @@ const PostCard = ({ post, onToggleLike }) => {
       Animated.spring(likeAnim, { toValue: 1, useNativeDriver: true }).start();
     }
   }, [post.is_liked]);
+
+  useEffect(() => {
+    setCommentsCount(post?.comments_count || 0);
+  }, [post?.comments_count]);
+
+  const handleCommentPress = () => {
+    setShowCommentsModal(true);
+  };
+
+  const handleCommentAdded = () => {
+    setCommentsCount(prev => prev + 1);
+    if (onPostUpdate) {
+      onPostUpdate();
+    }
+  };
 
   const getPostMediaItems = (p) => {
     if (!p) return [];
@@ -112,10 +130,18 @@ const PostCard = ({ post, onToggleLike }) => {
               <Text style={styles.actionText}>{post.likes_count}</Text>
             </Animated.View>
           </TouchableOpacity>
-          <TouchableOpacity><View style={styles.actionButton}><Ionicons name="chatbubble-outline" size={22} color="#1C1C1E" /><Text style={styles.actionText}>{post.comments_count}</Text></View></TouchableOpacity>
+          <TouchableOpacity onPress={handleCommentPress}><View style={styles.actionButton}><Ionicons name="chatbubble-outline" size={22} color="#1C1C1E" /><Text style={styles.actionText}>{commentsCount}</Text></View></TouchableOpacity>
           <TouchableOpacity><View style={[styles.actionButton, { paddingHorizontal: 10 }]}><Ionicons name="share-outline" size={22} color="#1C1C1E" /></View></TouchableOpacity>
         </View>
       </BlurView>
+
+      <CommentsModal
+        visible={showCommentsModal}
+        onClose={() => setShowCommentsModal(false)}
+        postId={post.post_id}
+        post={post}
+        onCommentAdded={handleCommentAdded}
+      />
     </View>
   );
 };
