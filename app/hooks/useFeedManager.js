@@ -23,8 +23,11 @@ export const useFeedManager = () => {
   }, []);
 
   const handleApiError = useCallback(async (error) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // Be more specific about when to force logout
+    if (error.response?.status === 401 && error.response?.data?.error?.includes('token')) {
       Alert.alert("Session Expired", "Please log in again.", [{ text: "OK", onPress: () => logout() }]);
+    } else if (error.response?.status === 403) {
+      Alert.alert("Access Denied", "You don't have permission to access this content.", [{ text: "OK" }]);
     } else {
       setError(error.message || 'An unexpected error occurred.');
     }
@@ -32,7 +35,16 @@ export const useFeedManager = () => {
 
   const fetchPosts = useCallback(async (isRefresh = false) => {
     // Exit if we're already fetching or have no more data
-    if ((loading || loadingMore) && !isRefresh) return;
+    if ((loading || loadingMore) && !isRefresh) {
+      console.log('Skipping fetch - already loading or loading more');
+      return;
+    }
+    
+    if (!hasMore && !isRefresh) {
+      console.log('Skipping fetch - no more data to load');
+      return;
+    }
+    
     if (!selectedFamily?.family_id) {
         setPosts([]);
         setLoading(false);
@@ -40,13 +52,15 @@ export const useFeedManager = () => {
     };
 
     const currentPage = isRefresh ? 1 : page;
+    console.log(`Fetching posts - Page: ${currentPage}, isRefresh: ${isRefresh}`);
 
     // Set the correct loading state
     if (isRefresh) {
         setRefreshing(true);
         setError(null);
+        setLoading(true);
     } else {
-        setLoadingMore(true); // Use loadingMore for subsequent pages
+        setLoadingMore(true);
     }
 
     try {
@@ -54,86 +68,110 @@ export const useFeedManager = () => {
       if (!isMounted) return;
 
       const newPosts = response.posts || [];
-      setPosts(prevPosts => isRefresh ? newPosts : [...prevPosts, ...newPosts]);
+      console.log(`Received ${newPosts.length} posts for page ${currentPage}`);
       
-      // Prepare for the next page
-      setPage(currentPage + 1);
-      // If API returns less items than a full page, we assume we've reached the end
-      setHasMore(newPosts.length === response.limit || (response.totalPages && currentPage < response.totalPages));
-
-    } catch (error) {
-      if (!isMounted) return;
-      handleApiError(error);
-    } finally {
-      if (!isMounted) return;
-      // Reset the correct loading/refreshing state
-      if(isRefresh) {
-        setRefreshing(false);
+      setPosts(prevPosts => {
+        if (isRefresh) {
+          return newPosts;
+        } else {
+          return [...prevPosts, ...newPosts];
+        }
+      });
+      
+      // Update pagination state
+      if (!isRefresh) {
+        setPage(currentPage + 1);
       } else {
+        setPage(2); // Next page after refresh will be page 2
+      }
+      
+      // Determine if there are more posts based on API response
+      const hasMoreData = response.totalPages ? currentPage < response.totalPages : newPosts.length === 10;
+      
+      setHasMore(hasMoreData);
+      console.log(`hasMore set to: ${hasMoreData} (currentPage: ${currentPage}, totalPages: ${response.totalPages}, newPostsLength: ${newPosts.length})`);
+      
+    } catch (error) {
+      console.error('Error fetching posts:', error);
+      if (isMounted) {
+        await handleApiError(error);
+      }
+    } finally {
+      if (isMounted) {
+        setLoading(false);
         setLoadingMore(false);
+        setRefreshing(false);
       }
     }
-  }, [selectedFamily, page, isMounted, handleApiError, loading, loadingMore]);
+  }, [selectedFamily?.family_id, page, loading, loadingMore, hasMore, handleApiError, isMounted]);
 
-  // Initial load or when family changes
-  useEffect(() => {
-    setLoading(true); // Show initial full-screen loader
-    setPosts([]);
-    setPage(1);
-    setHasMore(true);
-    fetchPosts(true).finally(() => setLoading(false));
-  }, [selectedFamily]);
+  const handleRefresh = useCallback(async () => {
+    await fetchPosts(true);
+  }, [fetchPosts]);
 
-
-  const handleRefresh = () => {
-    fetchPosts(true);
-  };
-
-  const handleLoadMore = () => {
-    // The check for loading states is now at the top of fetchPosts
-    if(hasMore) {
-        fetchPosts(false);
+  const handleLoadMore = useCallback(async () => {
+    console.log(`handleLoadMore called - hasMore: ${hasMore}, loadingMore: ${loadingMore}, loading: ${loading}`);
+    
+    if (!loadingMore && !loading && hasMore) {
+      console.log('Triggering fetchPosts for load more');
+      await fetchPosts(false);
+    } else {
+      console.log('Skipping load more - conditions not met');
     }
-  };
+  }, [fetchPosts, loadingMore, loading, hasMore]);
 
   const handleToggleLike = useCallback(async (postId) => {
-    const originalPosts = [...posts];
-    setPosts(prevPosts =>
-      prevPosts.map(p =>
-        p.post_id === postId
-          ? { ...p, is_liked: !p.is_liked, likes_count: p.is_liked ? p.likes_count - 1 : p.likes_count + 1 }
-          : p
-      )
-    );
     try {
+      const optimisticUpdate = posts.map(post => 
+        post.id === postId ? { 
+          ...post, 
+          liked: !post.liked,
+          likes_count: post.liked ? post.likes_count - 1 : post.likes_count + 1
+        } : post
+      );
+      setPosts(optimisticUpdate);
+
       await toggleLike(postId);
     } catch (error) {
-      setPosts(originalPosts);
-      Alert.alert("Error", "Failed to update like status. Please try again.");
+      // Revert optimistic update on error
+      setPosts(posts);
+      await handleApiError(error);
     }
-  }, [posts]);
-  
+  }, [posts, handleApiError]);
+
   const handleDeletePost = useCallback(async (postId) => {
-    const originalPosts = [...posts];
-    setPosts(prevPosts => prevPosts.filter(p => p.post_id !== postId));
     try {
-        await deletePostService(postId);
+      await deletePostService(postId);
+      setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
     } catch (error) {
-        setPosts(originalPosts);
-        Alert.alert("Error", "Failed to delete post. Please try again.");
+      await handleApiError(error);
     }
-  }, [posts]);
+  }, [handleApiError]);
+
+  // Load initial posts when family changes
+  useEffect(() => {
+    if (selectedFamily?.family_id && isMounted) {
+      setPage(1);
+      setHasMore(true);
+      fetchPosts(true);
+    }
+  }, [selectedFamily?.family_id, isMounted]);
 
   return {
     posts,
     loading,
     loadingMore,
     error,
+    refreshing,
+    hasMore,
+    selectedFamily,
     handleRefresh,
     handleLoadMore,
     handleToggleLike,
     handleDeletePost,
-    user,
-    selectedFamily,
+    fetchPosts
   };
 };
+
+// Add default export for React Router compatibility
+export default useFeedManager;

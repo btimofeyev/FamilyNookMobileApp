@@ -1,4 +1,4 @@
-// context/AuthContext.js - Refactored
+// context/AuthContext.js - Updated for modern session persistence
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import axios from 'axios';
 import { Alert, Platform } from 'react-native';
@@ -47,14 +47,17 @@ export const AuthProvider = ({ children }) => {
           
         case 'refresh_failed':
           console.log('Auth refresh failed:', event.error?.message);
-          if (event.error?.message === 'No refresh token available' || (event.retryCount && event.retryCount > 3)) {
+          // Only force logout after multiple failed attempts or specific errors
+          if (event.retryCount && event.retryCount > 5) {
             handleSessionExpired();
           }
           break;
           
         case 'authentication_required':
+          // Try to refresh session, but don't force logout immediately
           refreshUserSession().catch(error => {
             console.log('Failed to refresh session:', error.message);
+            // Only handle critical auth failures here
           });
           break;
       }
@@ -79,7 +82,7 @@ export const AuthProvider = ({ children }) => {
   }, [token]);
 
   /**
-   * Handles session expired scenario
+   * Handles session expired scenario - only for true session expiry
    */
   const handleSessionExpired = () => {
     if (!mountedRef.current) return;
@@ -98,28 +101,30 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Load initial auth state
+   * Load initial auth state - MODERN APPROACH
+   * Don't verify tokens immediately, just load them and let API calls handle verification
    */
   const loadAuthState = async () => {
     try {
       const storedToken = await SecureStorage.getAuthToken();
-      
-      if (!storedToken) {
-        finalizeAuthInit();
-        return;
-      }
-      
-      setToken(storedToken);
-      
       const storedUser = await SecureStorage.getUserData();
-      if (storedUser) {
+      
+      if (storedToken && storedUser) {
+        // Set the token and user without verification
+        setToken(storedToken);
         setUser(storedUser);
+        
+        // Update axios headers
+        axios.defaults.headers.common['Authorization'] = `Bearer ${storedToken}`;
+        
+        console.log('Auth state loaded successfully - user should stay logged in');
+      } else {
+        console.log('No stored auth data found - user needs to log in');
       }
       
-      // Verify token
-      await TokenManager.verifyToken(storedToken);
     } catch (e) {
       console.error('Failed to load auth state:', e);
+      // Don't force logout on load errors, just continue
     } finally {
       finalizeAuthInit();
     }
@@ -136,7 +141,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Refresh user session
+   * Refresh user session - only when explicitly needed
    */
   const refreshUserSession = async () => {
     try {
@@ -153,7 +158,7 @@ export const AuthProvider = ({ children }) => {
             await SecureStorage.updateUserData(userData);
           }
         } catch (userError) {
-          console.warn('Could not refresh user profile');
+          console.warn('Could not refresh user profile, but token is valid');
         }
       }
       
@@ -348,7 +353,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   /**
-   * Logout user
+   * Logout user - only when explicitly requested
    */
   const logout = async (callApi = true) => {
     try {

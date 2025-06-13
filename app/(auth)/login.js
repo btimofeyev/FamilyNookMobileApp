@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,7 +9,9 @@ import {
     Image,
     KeyboardAvoidingView,
     Platform,
-    ScrollView
+    ScrollView,
+    Animated,
+    Dimensions
 } from 'react-native';
 import { useRouter, Link } from 'expo-router';
 import { useAuth } from '../../context/AuthContext';
@@ -21,26 +23,129 @@ import { API_URL } from '@env';
 import { useFamily } from '../../context/FamilyContext';
 import { Ionicons } from '@expo/vector-icons';
 
+const { width, height } = Dimensions.get('window');
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
 
-// Reusable component for the "Liquid Glass" input fields, styled for the pastel theme
-const LiquidInput = ({ label, icon, error, children }) => {
+// Subtle Floating Elements for Depth
+const FloatingElements = () => {
+    const elements = useRef([]);
+    
+    useEffect(() => {
+        elements.current = Array.from({ length: 6 }, (_, i) => ({
+            id: i,
+            translateY: new Animated.Value(height + 100),
+            opacity: new Animated.Value(0),
+            size: Math.random() * 60 + 30,
+            delay: Math.random() * 5000
+        }));
+
+        const animateElements = () => {
+            elements.current.forEach((element) => {
+                Animated.loop(
+                    Animated.sequence([
+                        Animated.delay(element.delay),
+                        Animated.parallel([
+                            Animated.timing(element.translateY, {
+                                toValue: -100,
+                                duration: 20000,
+                                useNativeDriver: true,
+                            }),
+                            Animated.sequence([
+                                Animated.timing(element.opacity, {
+                                    toValue: 0.3,
+                                    duration: 2000,
+                                    useNativeDriver: true,
+                                }),
+                                Animated.timing(element.opacity, {
+                                    toValue: 0,
+                                    duration: 2000,
+                                    useNativeDriver: true,
+                                })
+                            ])
+                        ])
+                    ])
+                ).start();
+            });
+        };
+
+        animateElements();
+    }, []);
+
     return (
-        <View style={styles.inputContainer}>
-            <Text style={styles.label}>{label}</Text>
-            <BlurView
-                intensity={80}
-                tint="light"
-                style={[styles.inputBlurView, error ? styles.inputError : null]}
-            >
-                <Ionicons name={icon} size={20} color="rgba(0, 0, 0, 0.5)" style={styles.inputIcon} />
-                {children}
-            </BlurView>
-            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        <View style={styles.elementsContainer}>
+            {elements.current.map(element => (
+                <Animated.View
+                    key={element.id}
+                    style={[
+                        styles.floatingElement,
+                        {
+                            width: element.size,
+                            height: element.size,
+                            left: Math.random() * (width - element.size),
+                            transform: [{ translateY: element.translateY }],
+                            opacity: element.opacity
+                        }
+                    ]}
+                />
+            ))}
         </View>
     );
 };
 
+// True Liquid Glass Input Component
+const LiquidGlassInput = ({ label, icon, error, children, value }) => {
+    const focusAnim = useRef(new Animated.Value(0)).current;
+    const [isFocused, setIsFocused] = useState(false);
+
+    const onFocus = () => {
+        setIsFocused(true);
+        Animated.timing(focusAnim, {
+            toValue: 1,
+            duration: 200,
+            useNativeDriver: false,
+        }).start();
+    };
+
+    const onBlur = () => {
+        setIsFocused(false);
+        Animated.timing(focusAnim, {
+            toValue: 0,
+            duration: 200,
+            useNativeDriver: false,
+        }).start();
+    };
+
+    const borderColor = focusAnim.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.4)']
+    });
+
+    return (
+        <View style={styles.inputContainer}>
+            <Text style={styles.label}>{label}</Text>
+            <Animated.View style={[styles.inputWrapper, { borderColor }]}>
+                <BlurView
+                    intensity={isFocused ? 120 : 80}
+                    tint="light"
+                    style={styles.inputBlur}
+                >
+                    <View style={styles.inputContent}>
+                        <Ionicons 
+                            name={icon} 
+                            size={20} 
+                            color={isFocused ? "#1f2937" : "rgba(31, 41, 55, 0.7)"} 
+                            style={styles.inputIcon} 
+                        />
+                        {React.cloneElement(children, { onFocus, onBlur })}
+                    </View>
+                    {/* Liquid Glass Overlay */}
+                    <View style={styles.liquidOverlay} />
+                </BlurView>
+            </Animated.View>
+            {error ? <Text style={styles.errorText}>{error}</Text> : null}
+        </View>
+    );
+};
 
 export default function LoginScreen() {
     const [email, setEmail] = useState('');
@@ -51,7 +156,17 @@ export default function LoginScreen() {
     const { families, refreshFamilies, loading: familyLoading } = useFamily();
     const router = useRouter();
 
-    // --- All validation and handleLogin logic remains unchanged ---
+    // Subtle entrance animation
+    const fadeAnim = useRef(new Animated.Value(0)).current;
+
+    useEffect(() => {
+        Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 800,
+            useNativeDriver: true,
+        }).start();
+    }, []);
+
     const validateInputs = () => {
         let isValid = true;
         if (!email.trim()) {
@@ -115,228 +230,357 @@ export default function LoginScreen() {
             style={{ flex: 1 }}
         >
             <StatusBar style="dark" />
+            
+            {/* True Liquid Glass Background */}
             <LinearGradient
-                colors={['#d4fc79', '#96e6a1']}
+                colors={['#e0f2fe', '#bae6fd', '#7dd3fc']}
                 style={styles.container}
             >
+                <FloatingElements />
+                
+                {/* Background Blur Effect */}
+                <BlurView intensity={20} tint="light" style={styles.backgroundBlur} />
+                
                 <ScrollView
                     contentContainerStyle={styles.scrollContent}
                     keyboardShouldPersistTaps="handled"
+                    showsVerticalScrollIndicator={false}
                 >
-                    <View style={styles.logoContainer}>
-                        <Image
-                            source={require('../../assets/mainlogo.png')}
-                            style={styles.logo}
-                            resizeMode="contain"
-                        />
-                        <Text style={styles.appName}>FamlyNook</Text>
-                        <Text style={styles.tagline}>Connecting families, one moment at a time</Text>
-                    </View>
-
-                    <BlurView intensity={90} tint="light" style={styles.formContainer}>
-                        <Text style={styles.title}>Welcome Back</Text>
-
-                        {authError && <Text style={styles.authErrorText}>{authError}</Text>}
-
-                        <LiquidInput label="Email" icon="mail-outline" error={emailError}>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter your email"
-                                placeholderTextColor="rgba(0, 0, 0, 0.4)"
-                                value={email}
-                                onChangeText={setEmail}
-                                keyboardType="email-address"
-                                autoCapitalize="none"
-                                selectionColor="rgba(0, 0, 0, 0.5)"
+                    {/* Logo Section */}
+                    <Animated.View style={[styles.logoSection, { opacity: fadeAnim }]}>
+                        <View style={styles.logoContainer}>
+                            <Image
+                                source={require('../../assets/mainlogo.png')}
+                                style={styles.logo}
+                                resizeMode="contain"
                             />
-                        </LiquidInput>
-
-                        <LiquidInput label="Password" icon="lock-closed-outline" error={passwordError}>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Enter your password"
-                                placeholderTextColor="rgba(0, 0, 0, 0.4)"
-                                value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry
-                                selectionColor="rgba(0, 0, 0, 0.5)"
-                            />
-                        </LiquidInput>
-
-                        <Link href="/forgot-password" asChild>
-                            <TouchableOpacity style={styles.forgotPasswordButton}>
-                                <Text style={styles.forgotPassword}>Forgot Password?</Text>
-                            </TouchableOpacity>
-                        </Link>
-
-                        <TouchableOpacity
-                            style={styles.buttonContainer}
-                            onPress={handleLogin}
-                            disabled={loading}
-                            activeOpacity={0.8}
-                        >
-                            <LinearGradient
-                                colors={['#20bf55', '#01baef']}
-                                style={styles.buttonGradient}
-                            >
-                                {loading ? (
-                                    <ActivityIndicator color="#FFFFFF" />
-                                ) : (
-                                    <Text style={styles.buttonText}>Sign In</Text>
-                                )}
-                            </LinearGradient>
-                        </TouchableOpacity>
-
-                        <View style={styles.signUpContainer}>
-                            <Text style={styles.signUpText}>Don't have an account? </Text>
-                            <Link href="/register" asChild>
-                                <TouchableOpacity>
-                                    <Text style={styles.signUpLink}>Sign Up</Text>
-                                </TouchableOpacity>
-                            </Link>
                         </View>
-                    </BlurView>
+                        <Text style={styles.appName}>FamlyNook</Text>
+                        <Text style={styles.tagline}>Connect with those who matter most</Text>
+                    </Animated.View>
+
+                    {/* Main Liquid Glass Card */}
+                    <Animated.View style={[styles.cardWrapper, { opacity: fadeAnim }]}>
+                        <BlurView intensity={100} tint="light" style={styles.liquidCard}>
+                            <LinearGradient
+                                colors={[
+                                    'rgba(255, 255, 255, 0.4)',
+                                    'rgba(255, 255, 255, 0.1)',
+                                    'rgba(255, 255, 255, 0.3)'
+                                ]}
+                                style={styles.cardGradient}
+                            >
+                                <Text style={styles.cardTitle}>Welcome Back</Text>
+                                
+                                {authError && (
+                                    <BlurView intensity={80} tint="light" style={styles.errorCard}>
+                                        <View style={styles.errorContent}>
+                                            <Ionicons name="warning-outline" size={16} color="#dc2626" />
+                                            <Text style={styles.errorMessage}>{authError}</Text>
+                                        </View>
+                                    </BlurView>
+                                )}
+
+                                <LiquidGlassInput label="Email" icon="mail-outline" error={emailError} value={email}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Enter your email"
+                                        placeholderTextColor="rgba(31, 41, 55, 0.5)"
+                                        value={email}
+                                        onChangeText={setEmail}
+                                        keyboardType="email-address"
+                                        autoCapitalize="none"
+                                        selectionColor="#1f2937"
+                                    />
+                                </LiquidGlassInput>
+
+                                <LiquidGlassInput label="Password" icon="lock-closed-outline" error={passwordError} value={password}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Enter your password"
+                                        placeholderTextColor="rgba(31, 41, 55, 0.5)"
+                                        value={password}
+                                        onChangeText={setPassword}
+                                        secureTextEntry
+                                        selectionColor="#1f2937"
+                                    />
+                                </LiquidGlassInput>
+
+                                <Link href="/forgot-password" asChild>
+                                    <TouchableOpacity style={styles.forgotButton}>
+                                        <Text style={styles.forgotText}>Forgot your password?</Text>
+                                    </TouchableOpacity>
+                                </Link>
+
+                                {/* Liquid Glass Button */}
+                                <TouchableOpacity
+                                    style={styles.buttonWrapper}
+                                    onPress={handleLogin}
+                                    disabled={loading}
+                                    activeOpacity={0.8}
+                                >
+                                    <BlurView intensity={80} tint="dark" style={styles.buttonBlur}>
+                                        <LinearGradient
+                                            colors={['rgba(15, 23, 42, 0.9)', 'rgba(30, 41, 59, 0.9)']}
+                                            style={styles.buttonGradient}
+                                        >
+                                            {loading ? (
+                                                <ActivityIndicator color="#FFFFFF" size="small" />
+                                            ) : (
+                                                <Text style={styles.buttonText}>Sign In</Text>
+                                            )}
+                                        </LinearGradient>
+                                    </BlurView>
+                                </TouchableOpacity>
+
+                                {/* Footer */}
+                                <View style={styles.footer}>
+                                    <Text style={styles.footerText}>New to FamlyNook? </Text>
+                                    <Link href="/register" asChild>
+                                        <TouchableOpacity>
+                                            <Text style={styles.footerLink}>Create account</Text>
+                                        </TouchableOpacity>
+                                    </Link>
+                                </View>
+                            </LinearGradient>
+                        </BlurView>
+                    </Animated.View>
                 </ScrollView>
             </LinearGradient>
         </KeyboardAvoidingView>
     );
 }
 
-// Styles optimized for a light, pastel green theme
 const styles = StyleSheet.create({
     container: {
         flex: 1,
+    },
+    elementsContainer: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        pointerEvents: 'none',
+    },
+    floatingElement: {
+        position: 'absolute',
+        backgroundColor: 'rgba(255, 255, 255, 0.15)',
+        borderRadius: 1000,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+    },
+    backgroundBlur: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        pointerEvents: 'none',
     },
     scrollContent: {
         flexGrow: 1,
         justifyContent: 'center',
         alignItems: 'center',
         paddingVertical: 60,
-        paddingHorizontal: 20,
+        paddingHorizontal: 24,
+        minHeight: height,
+    },
+    logoSection: {
+        alignItems: 'center',
+        marginBottom: 48,
     },
     logoContainer: {
-        alignItems: 'center',
-        marginBottom: 30,
-    },
-    logo: {
         width: 100,
         height: 100,
+        borderRadius: 24,
+        backgroundColor: 'rgba(255, 255, 255, 0.3)',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginBottom: 20,
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    logo: {
+        width: 60,
+        height: 60,
     },
     appName: {
         fontSize: 42,
-        fontWeight: 'bold',
-        color: '#2c5b2f', // Dark green for contrast
-        marginTop: 16,
-        textShadowColor: 'rgba(255, 255, 255, 0.3)',
-        textShadowOffset: { width: 0, height: 2 },
-        textShadowRadius: 4,
+        fontWeight: '800',
+        color: '#0f172a',
+        marginBottom: 8,
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+        textShadowColor: 'rgba(255, 255, 255, 0.5)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
     tagline: {
         fontSize: 16,
-        color: 'rgba(44, 91, 47, 0.8)', // Dark green for contrast
-        marginTop: 4,
+        color: 'rgba(15, 23, 42, 0.7)',
+        textAlign: 'center',
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+        fontWeight: '500',
     },
-    formContainer: {
+    cardWrapper: {
         width: '100%',
-        padding: 24,
-        borderRadius: 25,
+        maxWidth: 400,
+    },
+    liquidCard: {
+        borderRadius: 32,
         overflow: 'hidden',
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.4)',
+        borderColor: 'rgba(255, 255, 255, 0.3)',
+        shadowColor: 'rgba(0, 0, 0, 0.1)',
+        shadowOffset: { width: 0, height: 20 },
+        shadowOpacity: 1,
+        shadowRadius: 40,
+        elevation: 20,
     },
-    title: {
-        fontSize: 28,
-        fontWeight: 'bold',
-        marginBottom: 30,
-        color: '#000000',
+    cardGradient: {
+        padding: 32,
+    },
+    cardTitle: {
+        fontSize: 32,
+        fontWeight: '700',
+        color: '#0f172a',
         textAlign: 'center',
+        marginBottom: 32,
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
     },
-    authErrorText: {
-        color: '#D90429',
-        fontSize: 14,
-        textAlign: 'center',
-        marginBottom: 16,
+    errorCard: {
+        borderRadius: 16,
+        overflow: 'hidden',
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(220, 38, 38, 0.2)',
     },
-    inputContainer: {
-        marginBottom: 20,
-    },
-    label: {
-        fontSize: 14,
-        color: 'rgba(0, 0, 0, 0.6)',
-        marginBottom: 8,
-    },
-    inputBlurView: {
+    errorContent: {
         flexDirection: 'row',
         alignItems: 'center',
-        height: 54,
-        borderRadius: 12,
+        padding: 16,
+        backgroundColor: 'rgba(254, 242, 242, 0.8)',
+    },
+    errorMessage: {
+        color: '#dc2626',
+        fontSize: 14,
+        marginLeft: 8,
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+        fontWeight: '500',
+    },
+    inputContainer: {
+        marginBottom: 24,
+    },
+    label: {
+        fontSize: 15,
+        color: '#374151',
+        marginBottom: 8,
+        fontWeight: '600',
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    },
+    inputWrapper: {
+        borderRadius: 20,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.2)',
-        backgroundColor: 'rgba(255, 255, 255, 0.25)',
         overflow: 'hidden',
+        shadowColor: 'rgba(0, 0, 0, 0.08)',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 1,
+        shadowRadius: 12,
+        elevation: 8,
+    },
+    inputBlur: {
+        height: 56,
+        justifyContent: 'center',
+        position: 'relative',
+    },
+    inputContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        height: '100%',
+        zIndex: 2,
+    },
+    liquidOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        borderRadius: 20,
     },
     inputIcon: {
-        paddingHorizontal: 12,
+        marginRight: 12,
     },
     input: {
         flex: 1,
-        height: '100%',
-        paddingRight: 16,
         fontSize: 16,
-        color: '#000000',
-        backgroundColor: 'transparent',
-    },
-    inputError: {
-        borderColor: '#D90429',
-    },
-    errorText: {
-        color: '#D90429',
-        fontSize: 13,
-        marginTop: 6,
-    },
-    forgotPasswordButton: {
-        alignSelf: 'flex-end',
-        marginVertical: 15,
-    },
-    forgotPassword: {
-        fontSize: 14,
-        color: 'rgba(0, 0, 0, 0.6)',
+        color: '#1f2937',
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
         fontWeight: '500',
     },
-    buttonContainer: {
-        height: 54,
-        marginTop: 20,
-        borderRadius: 27, // Pill shape
+    errorText: {
+        color: '#dc2626',
+        fontSize: 13,
+        marginTop: 6,
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    },
+    forgotButton: {
+        alignSelf: 'flex-end',
+        padding: 8,
+        marginBottom: 24,
+    },
+    forgotText: {
+        fontSize: 14,
+        color: '#6b7280',
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+        fontWeight: '500',
+    },
+    buttonWrapper: {
+        borderRadius: 28,
         overflow: 'hidden',
-        shadowColor: '#96e6a1', // Pastel green glow
+        marginBottom: 32,
+        shadowColor: 'rgba(15, 23, 42, 0.3)',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.6,
-        shadowRadius: 10,
+        shadowOpacity: 1,
+        shadowRadius: 16,
         elevation: 12,
+    },
+    buttonBlur: {
+        height: 56,
+        borderRadius: 28,
+        overflow: 'hidden',
     },
     buttonGradient: {
         height: '100%',
-        width: '100%',
         justifyContent: 'center',
         alignItems: 'center',
     },
     buttonText: {
         color: '#FFFFFF',
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 17,
+        fontWeight: '700',
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     },
-    signUpContainer: {
+    footer: {
         flexDirection: 'row',
         justifyContent: 'center',
-        marginTop: 30,
+        alignItems: 'center',
     },
-    signUpText: {
+    footerText: {
         fontSize: 15,
-        color: 'rgba(0, 0, 0, 0.6)',
+        color: '#6b7280',
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     },
-    signUpLink: {
+    footerLink: {
         fontSize: 15,
-        color: '#20bf55', // Contrasting green
-        fontWeight: 'bold',
+        color: '#0f172a',
+        fontWeight: '600',
+        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
     },
 });
