@@ -89,7 +89,7 @@ export default function MediaViewer({ visible, media, initialIndex = 0, onClose 
             }
         } else {
             lastTapTimeoutRef.current = setTimeout(() => {
-                // Handle single tap if needed in the future
+                // Single tap handling can be implemented here if needed
             }, DOUBLE_TAP_DELAY);
         }
         lastTapRef.current = now;

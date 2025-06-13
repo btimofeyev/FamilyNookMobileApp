@@ -3,7 +3,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Platform,
 } from 'react-native';
 import CommentSection from './CommentSection';
 import GlassModal from './shared/GlassModal';
@@ -17,6 +16,7 @@ const CommentsModal = ({ visible, onClose, postId, post, onCommentAdded }) => {
       setCommentCount(post.comments_count);
     }
   }, [post?.comments_count]);
+
 
   const handleCommentAdded = () => {
     setCommentCount(prev => prev + 1);

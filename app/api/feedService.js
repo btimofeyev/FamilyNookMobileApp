@@ -368,6 +368,7 @@ export const getComments = async (postId) => {
     const response = await apiClient.get(`/api/posts/${postId}/comments`);
     return response.data || [];
   } catch (error) {
+    console.error('Comments API error:', error.response?.data || error.message);
     throw handleApiError(error, 'Failed to load comments');
   }
 };

@@ -6,8 +6,7 @@ import {
   StyleSheet, 
   TouchableOpacity, 
   Animated,
-  Alert,
-  Platform
+  Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -96,7 +95,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
           style: "destructive",
           onPress: async () => {
             try {
-              // Call API to delete comment (to be implemented)
+              // TODO: Implement delete comment API call
               // await deleteComment(postId, commentId);
               
               // Refresh comments

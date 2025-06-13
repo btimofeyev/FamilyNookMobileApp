@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, SafeAreaView, Alert } from 'react-native';
-import { router } from 'expo-router';
+import { router, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import CreatePostForm from '../components/CreatePostForm';
@@ -49,6 +49,11 @@ export default function CreatePostScreen() {
 
   return (
     <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerShown: false,
+        }}
+      />
       <LinearGradient
         colors={Colors.background.gradient}
         style={StyleSheet.absoluteFill}

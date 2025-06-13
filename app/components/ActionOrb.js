@@ -18,13 +18,11 @@ const ActionOrb = ({ post, onToggleLike }) => {
 
   const handleComment = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    // router.push(`/post/${post.post_id}/comments`);
     console.log("Navigate to comments");
   };
 
   const handleShare = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      // Logic for sharing
       console.log("Open share sheet");
   };
 
@@ -97,8 +95,12 @@ const styles = StyleSheet.create({
       shadowOpacity: 0.1,
       shadowRadius: 4,
   },
-  commentButton: {},
-  shareButton: {},
+  commentButton: {
+    // Future styling can be added here
+  },
+  shareButton: {
+    // Future styling can be added here
+  },
   likeCountContainer: {
       position: 'absolute',
       left: -25,

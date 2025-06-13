@@ -39,10 +39,25 @@ export default function CommentSection({ postId, onCommentAdded }) {
   const fetchComments = async () => {
     try {
       setLoading(true);
+      
+      if (!postId) {
+        console.error('No postId provided to fetchComments');
+        setComments([]);
+        return;
+      }
+      
       const data = await getComments(postId);
-      setComments(data || []);
+      
+      // Ensure we have an array and log any issues
+      const commentsArray = Array.isArray(data) ? data : [];
+      if (!Array.isArray(data)) {
+        console.warn('Comments API returned non-array data:', typeof data, data);
+      }
+      
+      setComments(commentsArray);
     } catch (error) {
       console.error('Error fetching comments:', error);
+      setComments([]);
     } finally {
       setLoading(false);
     }
@@ -73,7 +88,9 @@ export default function CommentSection({ postId, onCommentAdded }) {
     try {
       await addComment(postId, newComment);
       setNewComment('');
-      fetchComments(); // Refresh comments list
+      
+      // Refresh comments list
+      await fetchComments();
       if (onCommentAdded) onCommentAdded();
       
       // Success haptic
@@ -229,8 +246,27 @@ export default function CommentSection({ postId, onCommentAdded }) {
         ) : (
           <FlatList
             data={comments}
-            keyExtractor={(item) => item.comment_id.toString()}
-            renderItem={({ item }) => <CommentItem comment={item} />}
+            keyExtractor={(item, index) => item.comment_id?.toString() || item.id?.toString() || `comment-${index}`}
+            renderItem={({ item }) => {
+              // Validate that the comment has required fields
+              if (!item) {
+                console.warn('Null comment item received');
+                return null;
+              }
+              
+              const commentText = item.text || item.comment_text;
+              const authorName = item.author_name || item.user_name;
+              
+              if (!commentText || !authorName) {
+                console.warn('Comment missing required fields:', {
+                  hasText: !!commentText,
+                  hasAuthor: !!authorName
+                });
+                return null;
+              }
+              
+              return <CommentItem comment={item} postId={postId} />;
+            }}
             ListEmptyComponent={
               <View style={styles.emptyContainer}>
                 <BlurView intensity={30} tint="systemUltraThinMaterialLight" style={styles.emptyBlur}>

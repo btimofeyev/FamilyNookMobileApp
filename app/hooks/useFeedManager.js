@@ -127,9 +127,8 @@ export const useFeedManager = () => {
   return {
     posts,
     loading,
-    loadingMore, // Export the new state
+    loadingMore,
     error,
-    refreshing,
     handleRefresh,
     handleLoadMore,
     handleToggleLike,
@@ -138,6 +137,3 @@ export const useFeedManager = () => {
     selectedFamily,
   };
 };
-
-const UseFeedManagerComponent = () => null;
-export default UseFeedManagerComponent;
