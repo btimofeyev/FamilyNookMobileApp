@@ -9,8 +9,11 @@ import { Colors } from '../theme';
 import * as Haptics from 'expo-haptics';
 
 export default function CreatePostScreen() {
+  console.log('CreatePostScreen component loaded');
   const { selectedFamily } = useFamily();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  console.log('CreatePostScreen - selectedFamily:', selectedFamily);
 
   const handlePostCreated = async (newPost) => {
     try {
@@ -77,6 +80,5 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    justifyContent: 'center',
   },
 });

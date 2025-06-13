@@ -9,8 +9,9 @@ import { Colors, Shadows, Spacing } from '../theme';
 const FloatingCreateButton = () => {
 
   const handlePress = () => {
+    console.log('FloatingCreateButton pressed - navigating to create-post');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    router.push('/create-post');
+    router.push('/(screens)/create-post');
   };
 
   return (

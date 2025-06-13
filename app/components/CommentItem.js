@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.sm,
     fontFamily: Typography.fonts.display,
     fontWeight: Typography.weights.semibold,
-    color: Colors.text.dark,
+    color: Colors.text.primary,
     letterSpacing: -0.2,
   },
   
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     fontSize: Typography.sizes.base,
     fontFamily: Typography.fonts.text,
     fontWeight: Typography.weights.normal,
-    color: Colors.text.dark,
+    color: Colors.text.primary,
     lineHeight: Typography.sizes.base * 1.5,
     letterSpacing: -0.2,
   },
