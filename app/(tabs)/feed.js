@@ -1,12 +1,14 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, FlatList, ActivityIndicator, Dimensions, TouchableOpacity, Animated, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Haptics from 'expo-haptics';
 import { useFeedManager } from '../hooks/useFeedManager';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import PostCard, { ITEM_LAYOUT_HEIGHT } from '../components/PostCard';
 import FloatingCreateButton from '../components/FloatingCreateButton';
+import FamilySelector from '../components/shared/FamilySelector';
 
 const { height: screenHeight } = Dimensions.get('window');
 const ITEM_HEIGHT = ITEM_LAYOUT_HEIGHT;
@@ -16,6 +18,16 @@ const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 export default function FeedScreen() {
   const { posts, loading, loadingMore, error, handleRefresh, handleLoadMore, handleToggleLike, selectedFamily } = useFeedManager();
   const scrollY = useRef(new Animated.Value(0)).current;
+  const [showFamilySelector, setShowFamilySelector] = useState(false);
+
+  const handleFamilySelectorPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setShowFamilySelector(true);
+  };
+
+  const handleCloseFamilySelector = () => {
+    setShowFamilySelector(false);
+  };
 
   // This component will be the new animated background
   const AnimatedGradient = () => {
@@ -99,10 +111,19 @@ export default function FeedScreen() {
         <Text style={styles.headerTitle} numberOfLines={1}>
           {selectedFamily ? selectedFamily.family_name : 'FamlyNook'}
         </Text>
-        <TouchableOpacity>
+        <TouchableOpacity 
+          onPress={handleFamilySelectorPress}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        >
           <Ionicons name="chevron-down-circle" size={28} color="rgba(255, 255, 255, 0.8)" />
         </TouchableOpacity>
       </BlurView>
+      
+      {/* Family Selector Modal */}
+      <FamilySelector
+        visible={showFamilySelector}
+        onClose={handleCloseFamilySelector}
+      />
     </View>
   );
 }
