@@ -9,11 +9,8 @@ import { Colors } from '../theme';
 import * as Haptics from 'expo-haptics';
 
 export default function CreatePostScreen() {
-  console.log('CreatePostScreen component loaded');
   const { selectedFamily } = useFamily();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  console.log('CreatePostScreen - selectedFamily:', selectedFamily);
 
   const handlePostCreated = async (newPost) => {
     try {
@@ -58,7 +55,7 @@ export default function CreatePostScreen() {
         }}
       />
       <LinearGradient
-        colors={Colors.background.gradient}
+        colors={['#1a1a2e', '#16213e', '#0f3460']}
         style={StyleSheet.absoluteFill}
       />
       <StatusBar style="light" />

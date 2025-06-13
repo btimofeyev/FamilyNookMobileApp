@@ -99,7 +99,7 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   };
 
   return (
-    <GlassCard style={styles.container}>
+    <GlassCard style={styles.container} intensity={60} tint="dark">
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <GlassInput
           placeholder="What's on your mind?"

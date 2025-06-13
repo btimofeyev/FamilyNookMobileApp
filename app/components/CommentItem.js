@@ -123,7 +123,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
       ]}
     >
       {/* Liquid Glass Comment Bubble */}
-      <BlurView intensity={BlurIntensity.medium} tint="systemUltraThinMaterialLight" style={styles.commentContainer}>
+      <BlurView intensity={BlurIntensity.strong} tint="dark" style={styles.commentContainer}>
         {/* Subtle gradient highlight for depth */}
         <LinearGradient
           colors={['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.05)']}
@@ -152,7 +152,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
                   style={styles.actionButton}
                   activeOpacity={1}
                 >
-                  <BlurView intensity={40} tint="light" style={styles.actionBlur}>
+                  <BlurView intensity={60} tint="dark" style={styles.actionBlur}>
                     <Ionicons name="corner-up-left" size={14} color={Colors.primary} />
                     <Text style={styles.actionText}>Reply</Text>
                   </BlurView>
@@ -166,7 +166,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
                 style={styles.actionButton}
                 activeOpacity={1}
               >
-                <BlurView intensity={40} tint="light" style={styles.actionBlur}>
+                <BlurView intensity={60} tint="dark" style={styles.actionBlur}>
                   <Ionicons 
                     name={showReplies ? "chevron-up" : "chevron-down"} 
                     size={14} 
@@ -185,7 +185,7 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
                 style={styles.deleteButton}
                 activeOpacity={1}
               >
-                <BlurView intensity={40} tint="light" style={styles.deleteBlur}>
+                <BlurView intensity={60} tint="dark" style={styles.deleteBlur}>
                   <Ionicons name="trash-outline" size={14} color={Colors.error} />
                 </BlurView>
               </TouchableOpacity>
@@ -232,9 +232,9 @@ const styles = StyleSheet.create({
   commentContainer: {
     borderRadius: BorderRadius.xl,
     overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    backgroundColor: 'rgba(28, 28, 30, 0.4)',
     // Liquid glass shadow with vitality
     shadowColor: Colors.primary,
     shadowOffset: { width: 0, height: 4 },
@@ -314,8 +314,9 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.full,
     gap: Spacing.xs,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(44, 44, 46, 0.6)',
   },
   
   actionText: {
@@ -339,8 +340,9 @@ const styles = StyleSheet.create({
   deleteBlur: {
     padding: Spacing.sm,
     borderRadius: BorderRadius.full,
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 69, 58, 0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 69, 58, 0.4)',
+    backgroundColor: 'rgba(44, 44, 46, 0.6)',
   },
   
   // Thread connections with gradient flow
