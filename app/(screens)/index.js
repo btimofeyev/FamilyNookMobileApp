@@ -1,4 +1,4 @@
-// app/(app)/index.js
+// app/(screens)/index.js
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';

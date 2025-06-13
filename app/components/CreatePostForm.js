@@ -1,23 +1,30 @@
 // app/components/CreatePostForm.js
 import React, { useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ActivityIndicator, 
-  Alert,
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
   ScrollView,
-  Image
+  Image,
+  Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+
 import { createPost } from '../api/feedService';
 import MediaPickerModal from './shared/MediaPickerModal';
-import GlassCard from './shared/GlassCard';
-import GlassInput from './shared/GlassInput';
-import GlassButton from './shared/GlassButton';
 import { Colors, Typography, Spacing, BorderRadius } from '../theme';
+
+const { width: screenWidth } = Dimensions.get('window');
+const CARD_WIDTH = screenWidth * 0.9;
+const CARD_ASPECT_RATIO = 3 / 4;
+const CARD_HEIGHT = CARD_WIDTH / CARD_ASPECT_RATIO;
 
 const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   const [caption, setCaption] = useState('');
@@ -29,11 +36,8 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   const handleMediaSelected = (selectedMedia) => {
     if (!selectedMedia || selectedMedia.length === 0) return;
     
-    // Add selected media to the state
     setMediaItems(prev => {
       const newItems = [...prev];
-      
-      // Add each item that was successfully uploaded
       selectedMedia.forEach(item => {
         if (item.success && item.fileUrl) {
           newItems.push({
@@ -41,11 +45,10 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
             mediaUrl: item.fileUrl,
             mediaType: item.type?.startsWith('video/') ? 'video' : 'image',
             mediaKey: item.key,
-            uploadId : item.uploadId 
+            uploadId: item.uploadId,
           });
         }
       });
-      
       return newItems;
     });
   };
@@ -57,7 +60,7 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
 
   const handlePost = async () => {
     if (!caption && mediaItems.length === 0) {
-      setError('Please enter a caption or add media');
+      setError('Please enter a caption or add media.');
       return;
     }
 
@@ -65,32 +68,25 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
       setLoading(true);
       setError(null);
 
-      // Create post data object
-      const postData = {
-        caption,
-      };
+      const postData = { caption };
 
-      // Only if we have uploaded media, add it to the post data
-       if (mediaItems.length) {
-         postData.media = mediaItems.map(m => ({
-            uploadId : m.uploadId,
-            url      : m.mediaUrl,
-            type     : m.mediaType           // 'image' | 'video'
-          }));
-         }
+      if (mediaItems.length) {
+        postData.media = mediaItems.map(m => ({
+          uploadId: m.uploadId,
+          url: m.mediaUrl,
+          type: m.mediaType,
+        }));
+      }
 
-      // Send to API
       const response = await createPost(familyId, postData);
 
-      // Call the success callback
       if (onPostCreated) {
         onPostCreated(response);
       }
       
-      // Provide haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      console.error('Error creating post:', error);
+    } catch (err) {
+      console.error('Error creating post:', err);
       setError('Failed to create post. Please try again.');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
@@ -99,29 +95,39 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   };
 
   return (
-    <GlassCard style={styles.container} intensity={60} tint="dark">
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <GlassInput
-          placeholder="What's on your mind?"
-          value={caption}
-          onChangeText={setCaption}
-          multiline={true}
-          numberOfLines={4}
-          style={styles.captionInput}
+    <View style={styles.cardShadow}>
+      <BlurView intensity={95} tint="light" style={styles.card}>
+        <LinearGradient
+          colors={['rgba(255, 255, 255, 0.5)', 'rgba(255, 255, 255, 0.1)']}
+          style={styles.cardHighlight}
         />
-        
-        {/* Media Preview */}
-        {mediaItems.length > 0 && (
-          <View style={styles.mediaPreviewContainer}>
-            <ScrollView 
-              horizontal={true} 
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.mediaScrollContainer}
-            >
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContent}
+        >
+          <View style={styles.header}>
+            <Text style={styles.title}>Create a New Post</Text>
+            <TouchableOpacity onPress={onCancel} disabled={loading}>
+              <Ionicons name="close-circle" size={32} color={Colors.text.tertiary} />
+            </TouchableOpacity>
+          </View>
+
+          <View style={styles.inputContainer}>
+            <TextInput
+              placeholder="What's on your mind?"
+              placeholderTextColor={Colors.text.placeholder}
+              value={caption}
+              onChangeText={setCaption}
+              multiline={true}
+              style={styles.captionInput}
+            />
+          </View>
+
+          {mediaItems.length > 0 && (
+            <View style={styles.mediaPreviewContainer}>
               {mediaItems.map((item, index) => (
                 <View key={item.id || index} style={styles.mediaPreviewItem}>
-                  <Image source={{ uri: item.mediaUrl }} style={styles.mediaPreview} />
-                  
+                  <Image source={{ uri: item.mediaUrl }} style={styles.mediaImage} />
                   {!loading && (
                     <TouchableOpacity
                       style={styles.removeButton}
@@ -130,141 +136,161 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
                       <Ionicons name="close-circle" size={24} color={Colors.error} />
                     </TouchableOpacity>
                   )}
-                  
                   {item.mediaType === 'video' && (
                     <View style={styles.videoIndicator}>
-                      <Ionicons name="play-circle" size={32} color={Colors.text.primary} />
+                      <Ionicons name="play-circle" size={32} color="white" />
                     </View>
                   )}
                 </View>
               ))}
-            </ScrollView>
-          </View>
-        )}
-        
-        {/* Error Message */}
-        {error && (
-          <View style={styles.errorContainer}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        )}
-        
-        {/* Media Selection Button */}
-        <GlassButton
-          title={mediaItems.length > 0 ? 'Add More Media' : 'Add Photos & Videos'}
-          icon="images-outline"
-          variant="glass"
-          onPress={() => setShowMediaPicker(true)}
-          disabled={loading}
-          style={styles.mediaButton}
-        />
-        
-        <View style={styles.buttonContainer}>
-          <GlassButton
-            title="Cancel"
-            variant="glass"
-            onPress={onCancel}
-            disabled={loading}
-            style={styles.cancelButton}
-          />
-          
-          <GlassButton
-            title="Post"
-            variant="primary"
+            </View>
+          )}
+
+          <TouchableOpacity style={styles.mediaButton} onPress={() => setShowMediaPicker(true)} disabled={loading}>
+            <Ionicons name="images-outline" size={22} color={Colors.text.dark} />
+            <Text style={styles.mediaButtonText}>{mediaItems.length > 0 ? 'Add More Media' : 'Add Photos & Videos'}</Text>
+          </TouchableOpacity>
+
+          {error && <Text style={styles.errorText}>{error}</Text>}
+
+          <TouchableOpacity
+            style={[styles.postButton, (!caption && mediaItems.length === 0) && styles.disabledButton]}
             onPress={handlePost}
-            loading={loading}
-            disabled={!caption && mediaItems.length === 0}
-            gradientColors={[Colors.primary, Colors.primaryDark]}
-            style={styles.postButton}
-          />
-        </View>
-      </ScrollView>
-      
-      {/* Media Picker Modal */}
-      <MediaPickerModal
-        visible={showMediaPicker}
-        onClose={() => setShowMediaPicker(false)}
-        onMediaSelected={handleMediaSelected}
-        allowMultiple={true}
-        showVideos={true}
-        maxItems={4}
-      />
-    </GlassCard>
+            disabled={loading || (!caption && mediaItems.length === 0)}
+          >
+            {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.postButtonText}>Post to Family</Text>}
+          </TouchableOpacity>
+        </ScrollView>
+
+        <MediaPickerModal
+          visible={showMediaPicker}
+          onClose={() => setShowMediaPicker(false)}
+          onMediaSelected={handleMediaSelected}
+          allowMultiple={true}
+          showVideos={true}
+          maxItems={4}
+        />
+      </BlurView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    margin: Spacing.lg,
+  cardShadow: {
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.25,
+    shadowRadius: 32,
+    alignSelf: 'center',
+    // marginTop: Spacing['5xl'], // This was removed
+  },
+  card: {
+    width: CARD_WIDTH,
+    height: CARD_HEIGHT,
+    borderRadius: 35,
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    overflow: 'hidden',
+  },
+  cardHighlight: {
+    position: 'absolute',
+    top: 1.5,
+    left: 1.5,
+    right: 1.5,
+    height: '60%',
   },
   scrollContent: {
-    padding: Spacing.lg,
+    padding: Spacing.xl,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  title: {
+    fontSize: Typography.sizes['2xl'],
+    fontWeight: Typography.weights.bold,
+    color: Colors.text.dark,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+  },
+  inputContainer: {
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+    minHeight: 120,
+    marginBottom: Spacing.lg,
   },
   captionInput: {
-    marginBottom: Spacing.lg,
+    fontSize: Typography.sizes.base,
+    color: Colors.text.dark,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   mediaPreviewContainer: {
-    marginBottom: Spacing.lg,
-  },
-  mediaScrollContainer: {
-    paddingBottom: Spacing.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginBottom: Spacing.md,
   },
   mediaPreviewItem: {
-    width: 100,
-    height: 100,
-    borderRadius: BorderRadius.md,
-    marginRight: Spacing.sm,
-    overflow: 'hidden',
-    position: 'relative',
+    width: 80,
+    height: 80,
+    borderRadius: BorderRadius.sm,
+    margin: Spacing.xs,
   },
-  mediaPreview: {
+  mediaImage: {
     width: '100%',
     height: '100%',
+    borderRadius: BorderRadius.sm,
   },
   removeButton: {
     position: 'absolute',
-    top: Spacing.xs,
-    right: Spacing.xs,
-    zIndex: 2,
-    backgroundColor: Colors.glass.medium,
+    top: -5,
+    right: -5,
+    backgroundColor: 'white',
     borderRadius: 12,
   },
   videoIndicator: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
   },
-  errorContainer: {
-    backgroundColor: `${Colors.error}20`,
-    padding: Spacing.md,
-    borderRadius: BorderRadius.md,
-    marginBottom: Spacing.lg,
+  mediaButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.4)',
     borderWidth: 1,
-    borderColor: `${Colors.error}40`,
+    borderColor: 'rgba(255,255,255,0.6)',
+    height: 50,
+    borderRadius: 25,
+    marginBottom: Spacing.lg,
+  },
+  mediaButtonText: {
+    fontSize: Typography.sizes.base,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.text.dark,
+    marginLeft: Spacing.sm,
   },
   errorText: {
     color: Colors.error,
-    fontSize: Typography.sizes.sm,
-    fontFamily: Typography.fonts.text,
-  },
-  mediaButton: {
-    marginBottom: Spacing.lg,
-  },
-  buttonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    gap: Spacing.md,
-  },
-  cancelButton: {
-    flex: 1,
+    textAlign: 'center',
+    marginBottom: Spacing.md,
   },
   postButton: {
-    flex: 1,
+    backgroundColor: Colors.primary,
+    height: 50,
+    borderRadius: 25,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  disabledButton: {
+    backgroundColor: Colors.text.tertiary,
+  },
+  postButtonText: {
+    color: 'white',
+    fontSize: Typography.sizes.lg,
+    fontWeight: Typography.weights.bold,
   },
 });
 
