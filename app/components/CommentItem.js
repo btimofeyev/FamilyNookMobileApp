@@ -1,5 +1,5 @@
 // app/components/CommentItem.js
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -10,10 +10,12 @@ import {
   Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import TimeAgo from './TimeAgo';
 import { useAuth } from '../../context/AuthContext';
-import { BlurView } from 'expo-blur';
+import { Colors, Typography, Spacing, BorderRadius, BlurIntensity, Animations } from '../theme';
 
 // Maximum nesting level for comments
 const MAX_NESTING_LEVEL = 3;
@@ -25,22 +27,57 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
   const isCurrentUser = user?.id === (comment.author_id || comment.user_id);
   const commentId = comment.id || comment.comment_id;
   
+  // Animation refs for liquid glass micro-animations
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scaleAnim = useRef(new Animated.Value(0.95)).current;
+  const replyButtonScale = useRef(new Animated.Value(1)).current;
+  
   // Get comment text from different possible fields
   const commentText = comment.text || comment.comment_text;
   // Get author name from different possible fields
   const authorName = comment.author_name || comment.user_name;
   
-  // Calculate left margin based on nesting level
-  const nestingMargin = level * 16;
+  // Calculate left margin based on nesting level with liquid flow
+  const nestingMargin = level * 24;
+
+  // Entrance animation
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 400,
+        delay: level * 100, // Cascade effect
+        useNativeDriver: true,
+      }),
+      Animated.spring(scaleAnim, {
+        toValue: 1,
+        delay: level * 100,
+        ...Animations.spring,
+      }),
+    ]).start();
+  }, []);
   
   const handlePressReply = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
+    // Button animation
+    Animated.sequence([
+      Animated.spring(replyButtonScale, {
+        toValue: 0.9,
+        ...Animations.spring,
+      }),
+      Animated.spring(replyButtonScale, {
+        toValue: 1,
+        ...Animations.spring,
+      }),
+    ]).start();
+    
     onReply && onReply(comment);
   };
   
   const toggleReplies = () => {
     if (hasReplies) {
       setShowReplies(!showReplies);
-      // Give haptic feedback on toggle
       Haptics.selectionAsync();
     }
   };
@@ -79,60 +116,96 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
     <Animated.View 
       style={[
         styles.container,
-        { opacity, marginLeft: nestingMargin }
+        { 
+          opacity: fadeAnim, 
+          marginLeft: nestingMargin,
+          transform: [{ scale: scaleAnim }]
+        }
       ]}
     >
-      <BlurView intensity={10} tint="dark" style={styles.commentContainer}>
-        <View style={styles.commentHeader}>
-          <Text style={styles.commentAuthor}>{authorName}</Text>
-          <TimeAgo date={new Date(comment.created_at)} style={styles.commentTime} />
-        </View>
+      {/* Liquid Glass Comment Bubble */}
+      <BlurView intensity={BlurIntensity.medium} tint="systemUltraThinMaterialLight" style={styles.commentContainer}>
+        {/* Subtle gradient highlight for depth */}
+        <LinearGradient
+          colors={['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.05)']}
+          style={styles.commentHighlight}
+        />
         
-        <Text style={styles.commentText}>{commentText}</Text>
-        
-        <View style={styles.commentActions}>
-          {level < MAX_NESTING_LEVEL && (
-            <TouchableOpacity 
-              onPress={handlePressReply} 
-              style={styles.actionButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="return-down-forward-outline" size={14} color="#3BAFBC" style={styles.actionIcon} />
-              <Text style={styles.actionText}>Reply</Text>
-            </TouchableOpacity>
-          )}
+        {/* Comment Content */}
+        <View style={styles.commentContent}>
+          {/* Header with elegant typography */}
+          <View style={styles.commentHeader}>
+            <Text style={styles.commentAuthor}>{authorName}</Text>
+            <TimeAgo date={new Date(comment.created_at)} style={styles.commentTime} />
+          </View>
           
-          {hasReplies && (
-            <TouchableOpacity 
-              onPress={toggleReplies} 
-              style={styles.actionButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons 
-                name={showReplies ? "chevron-up" : "chevron-down"} 
-                size={14} 
-                color="#3BAFBC" 
-                style={styles.actionIcon} 
-              />
-              <Text style={[styles.actionText, showReplies && styles.activeAction]}>
-                {showReplies ? 'Hide Replies' : `${comment.replies.length} ${comment.replies.length === 1 ? 'Reply' : 'Replies'}`}
-              </Text>
-            </TouchableOpacity>
-          )}
+          {/* Comment text with proper contrast */}
+          <View style={styles.textContainer}>
+            <Text style={styles.commentText}>{commentText}</Text>
+          </View>
           
-          {isCurrentUser && (
-            <TouchableOpacity 
-              onPress={handleDelete} 
-              style={styles.deleteButton}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={14} color="#FF453A" style={styles.actionIcon} />
-              <Text style={styles.deleteText}>Delete</Text>
-            </TouchableOpacity>
-          )}
+          {/* Action buttons with liquid glass styling */}
+          <View style={styles.commentActions}>
+            {level < MAX_NESTING_LEVEL && (
+              <Animated.View style={{ transform: [{ scale: replyButtonScale }] }}>
+                <TouchableOpacity 
+                  onPress={handlePressReply} 
+                  style={styles.actionButton}
+                  activeOpacity={1}
+                >
+                  <BlurView intensity={40} tint="light" style={styles.actionBlur}>
+                    <Ionicons name="corner-up-left" size={14} color={Colors.primary} />
+                    <Text style={styles.actionText}>Reply</Text>
+                  </BlurView>
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+            
+            {hasReplies && (
+              <TouchableOpacity 
+                onPress={toggleReplies} 
+                style={styles.actionButton}
+                activeOpacity={1}
+              >
+                <BlurView intensity={40} tint="light" style={styles.actionBlur}>
+                  <Ionicons 
+                    name={showReplies ? "chevron-up" : "chevron-down"} 
+                    size={14} 
+                    color={Colors.primary}
+                  />
+                  <Text style={[styles.actionText, showReplies && styles.activeAction]}>
+                    {showReplies ? 'Hide' : `${comment.replies.length}`}
+                  </Text>
+                </BlurView>
+              </TouchableOpacity>
+            )}
+            
+            {isCurrentUser && (
+              <TouchableOpacity 
+                onPress={handleDelete} 
+                style={styles.deleteButton}
+                activeOpacity={1}
+              >
+                <BlurView intensity={40} tint="light" style={styles.deleteBlur}>
+                  <Ionicons name="trash-outline" size={14} color={Colors.error} />
+                </BlurView>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
       </BlurView>
       
+      {/* Thread connection line with liquid flow */}
+      {level > 0 && (
+        <View style={[styles.threadLine, { left: -12 }]}>
+          <LinearGradient
+            colors={[Colors.primary, `${Colors.primary}40`]}
+            style={styles.threadGradient}
+          />
+        </View>
+      )}
+      
+      {/* Nested replies with proper spacing */}
       {hasReplies && showReplies && (
         <View style={styles.repliesContainer}>
           {comment.replies.map((reply) => (
@@ -147,108 +220,153 @@ const CommentItem = ({ comment, onReply, level = 0, opacity = 1, postId, onUpdat
           ))}
         </View>
       )}
-      
-      {level > 0 && (
-        <View style={[
-          styles.threadLine, 
-          { 
-            left: -8, 
-            height: '100%', 
-            top: 0,
-            backgroundColor: '#3BAFBC' // Teal Glow for thread line
-          }
-        ]} />
-      )}
     </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: 12,
+    marginBottom: Spacing.md,
   },
+  
+  // Liquid Glass Comment Bubble
   commentContainer: {
-    backgroundColor: 'rgba(18, 18, 18, 0.8)', // Onyx Black with transparency
-    borderRadius: 16,
-    padding: 14,
-    borderLeftWidth: 2,
-    borderLeftColor: '#3BAFBC', // Teal Glow
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: BorderRadius.xl,
     overflow: 'hidden',
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'transparent',
+    // Liquid glass shadow with vitality
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 8,
   },
+  
+  commentHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '40%',
+    borderRadius: BorderRadius.xl,
+  },
+  
+  commentContent: {
+    padding: Spacing.lg,
+    position: 'relative',
+    zIndex: 1,
+  },
+  
+  // Typography with SF Pro hierarchy
   commentHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
   },
+  
   commentAuthor: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#F5F5F7', // Soft White
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    letterSpacing: -0.2, // Apple-style tight letter spacing
+    fontSize: Typography.sizes.sm,
+    fontFamily: Typography.fonts.display,
+    fontWeight: Typography.weights.semibold,
+    color: Colors.text.dark,
+    letterSpacing: -0.2,
   },
+  
   commentTime: {
-    fontSize: 12,
-    color: '#8E8E93', // Slate Gray
-    marginLeft: 8,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontSize: Typography.sizes.xs,
+    fontFamily: Typography.fonts.text,
+    fontWeight: Typography.weights.medium,
+    color: Colors.text.secondary,
+    letterSpacing: -0.1,
   },
+  
+  textContainer: {
+    marginBottom: Spacing.md,
+  },
+  
   commentText: {
-    fontSize: 15,
-    color: '#F5F5F7', // Soft White
-    lineHeight: 22,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    letterSpacing: -0.2, // Apple-style tight letter spacing
+    fontSize: Typography.sizes.base,
+    fontFamily: Typography.fonts.text,
+    fontWeight: Typography.weights.normal,
+    color: Colors.text.dark,
+    lineHeight: Typography.sizes.base * 1.5,
+    letterSpacing: -0.2,
   },
+  
+  // Action buttons with liquid glass styling
   commentActions: {
     flexDirection: 'row',
-    marginTop: 12,
     alignItems: 'center',
+    gap: Spacing.md,
   },
+  
   actionButton: {
-    marginRight: 18,
+    borderRadius: BorderRadius.full,
+    overflow: 'hidden',
+  },
+  
+  actionBlur: {
     flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    gap: Spacing.xs,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
-  actionIcon: {
-    marginRight: 4,
-  },
+  
   actionText: {
-    fontSize: 13,
-    color: '#3BAFBC', // Teal Glow
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontSize: Typography.sizes.xs,
+    fontFamily: Typography.fonts.text,
+    fontWeight: Typography.weights.medium,
+    color: Colors.primary,
     letterSpacing: -0.1,
   },
+  
   activeAction: {
-    color: '#98D8D3', // Soft Mint (secondary accent)
+    color: Colors.secondary,
   },
+  
   deleteButton: {
     marginLeft: 'auto',
-    flexDirection: 'row',
-    alignItems: 'center',
+    borderRadius: BorderRadius.full,
+    overflow: 'hidden',
   },
-  deleteText: {
-    fontSize: 13,
-    color: '#FF453A', // Apple's system red color
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    letterSpacing: -0.1,
+  
+  deleteBlur: {
+    padding: Spacing.sm,
+    borderRadius: BorderRadius.full,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255, 69, 58, 0.3)',
   },
-  repliesContainer: {
-    marginTop: 10,
-    paddingLeft: 12,
-  },
+  
+  // Thread connections with gradient flow
   threadLine: {
     position: 'absolute',
-    width: 1.5,
-    backgroundColor: '#3BAFBC', // Teal Glow for thread line
-    opacity: 0.7,
+    width: 2,
+    top: 0,
+    bottom: 0,
+    borderRadius: 1,
+    overflow: 'hidden',
+    opacity: 0.6,
+  },
+  
+  threadGradient: {
+    flex: 1,
+    width: '100%',
+  },
+  
+  // Nested replies with proper material separation
+  repliesContainer: {
+    marginTop: Spacing.md,
+    paddingLeft: Spacing.xl,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(59, 175, 188, 0.2)',
+    marginLeft: Spacing.md,
   },
 });
 
