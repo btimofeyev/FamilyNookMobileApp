@@ -1,5 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, Image, TouchableOpacity, Dimensions, Platform, FlatList, Animated } from 'react-native';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  Image, 
+  TouchableOpacity, 
+  Dimensions, 
+  Platform, 
+  FlatList, 
+  Animated 
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Video, ResizeMode } from 'expo-av';
 import TimeAgo from './TimeAgo';
@@ -7,30 +17,165 @@ import { BlurView } from 'expo-blur';
 import MemberAvatar from './MemberAvatar';
 import { LinearGradient } from 'expo-linear-gradient';
 import CommentsModal from './CommentsModal';
+import * as Haptics from 'expo-haptics';
 
 const { width: screenWidth } = Dimensions.get('window');
 
-export const CARD_WIDTH = screenWidth * 0.88;
+export const CARD_WIDTH = screenWidth * 0.9;
 const CARD_ASPECT_RATIO = 3 / 4.5;
 export const CARD_HEIGHT = CARD_WIDTH / CARD_ASPECT_RATIO;
 export const ITEM_LAYOUT_HEIGHT = CARD_HEIGHT + 40;
+
+// Clean Action Button with proper functionality
+const CleanActionButton = ({ 
+  icon, 
+  count, 
+  isActive = false, 
+  onPress, 
+  color = '#1C1C1E',
+  activeColor = '#FF3B30',
+  style,
+  disabled = false
+}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    if (disabled) return;
+    Animated.spring(scaleAnim, {
+      toValue: 0.95,
+      useNativeDriver: true,
+      tension: 300,
+      friction: 25,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    if (disabled) return;
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 300,
+      friction: 25,
+    }).start();
+  };
+
+  const handlePress = () => {
+    if (disabled || !onPress) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress();
+  };
+
+  return (
+    <TouchableOpacity
+      onPress={handlePress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      style={[styles.actionButtonContainer, style]}
+      activeOpacity={1}
+      disabled={disabled}
+    >
+      <Animated.View 
+        style={[
+          styles.actionButtonWrapper,
+          { transform: [{ scale: scaleAnim }] },
+          disabled && styles.disabledButton
+        ]}
+      >
+        <BlurView 
+          intensity={75} 
+          tint="light" 
+          style={[
+            styles.actionButton,
+            isActive && styles.activeActionButton
+          ]}
+        >
+          <LinearGradient
+            colors={isActive 
+              ? ['rgba(255, 59, 48, 0.15)', 'rgba(255, 59, 48, 0.05)']
+              : ['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.4)']
+            }
+            style={styles.actionButtonHighlight}
+          />
+          <View style={styles.actionButtonContent}>
+            <Ionicons 
+              name={icon} 
+              size={20} 
+              color={isActive ? activeColor : color} 
+            />
+            {count !== undefined && count !== null && (
+              <Text style={[
+                styles.actionText,
+                { color: isActive ? activeColor : color }
+              ]}>
+                {count}
+              </Text>
+            )}
+          </View>
+        </BlurView>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
 
 const PostCard = ({ post, onToggleLike, onPostUpdate }) => {
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [showCommentsModal, setShowCommentsModal] = useState(false);
   const [commentsCount, setCommentsCount] = useState(post?.comments_count || 0);
+  const [likesCount, setLikesCount] = useState(post?.likes_count || 0);
+  const [isLiked, setIsLiked] = useState(post?.is_liked || false);
+  const [isLiking, setIsLiking] = useState(false);
   const likeAnim = useRef(new Animated.Value(1)).current;
 
-  useEffect(() => {
-    if (post.is_liked) {
-      likeAnim.setValue(1.2);
-      Animated.spring(likeAnim, { toValue: 1, useNativeDriver: true }).start();
-    }
-  }, [post.is_liked]);
-
+  // Update local state when post prop changes
   useEffect(() => {
     setCommentsCount(post?.comments_count || 0);
-  }, [post?.comments_count]);
+    setLikesCount(post?.likes_count || 0);
+    setIsLiked(post?.is_liked || false);
+  }, [post?.comments_count, post?.likes_count, post?.is_liked]);
+
+  // Like animation effect
+  useEffect(() => {
+    if (isLiked) {
+      Animated.sequence([
+        Animated.timing(likeAnim, { 
+          toValue: 1.2, 
+          duration: 150, 
+          useNativeDriver: true 
+        }),
+        Animated.spring(likeAnim, { 
+          toValue: 1, 
+          useNativeDriver: true,
+          tension: 300,
+          friction: 25,
+        })
+      ]).start();
+    }
+  }, [isLiked]);
+
+  const handleLike = async () => {
+    if (isLiking || !onToggleLike) return;
+    
+    setIsLiking(true);
+    
+    // Optimistic update
+    const newIsLiked = !isLiked;
+    const newLikesCount = newIsLiked ? likesCount + 1 : likesCount - 1;
+    
+    setIsLiked(newIsLiked);
+    setLikesCount(newLikesCount);
+    
+    try {
+      // Call the parent's toggle like function with the post ID
+      await onToggleLike(post.post_id || post.id);
+    } catch (error) {
+      // Revert optimistic update on error
+      setIsLiked(!newIsLiked);
+      setLikesCount(likesCount);
+      console.error('Error toggling like:', error);
+    } finally {
+      setIsLiking(false);
+    }
+  };
 
   const handleCommentPress = () => {
     setShowCommentsModal(true);
@@ -41,6 +186,12 @@ const PostCard = ({ post, onToggleLike, onPostUpdate }) => {
     if (onPostUpdate) {
       onPostUpdate();
     }
+  };
+
+  const handleShare = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // TODO: Implement share functionality
+    console.log('Share post:', post.post_id || post.id);
   };
 
   const getPostMediaItems = (p) => {
@@ -62,7 +213,14 @@ const PostCard = ({ post, onToggleLike, onPostUpdate }) => {
   const renderMediaItem = ({ item }) => (
     <View style={styles.mediaItemContainer}>
       {item.type === 'video' ? (
-        <Video source={{ uri: item.url }} style={styles.media} resizeMode={ResizeMode.COVER} isLooping isMuted shouldPlay />
+        <Video
+          source={{ uri: item.url }}
+          style={styles.media}
+          useNativeControls
+          resizeMode={ResizeMode.COVER}
+          isLooping
+          shouldPlay={false}
+        />
       ) : (
         <Image source={{ uri: item.url }} style={styles.media} resizeMode="cover" />
       )}
@@ -72,27 +230,47 @@ const PostCard = ({ post, onToggleLike, onPostUpdate }) => {
   const renderContent = () => {
     if (mediaItems.length > 0) {
       return (
-        <View style={{flex: 1}}>
+        <View style={styles.mediaContainer}>
           <FlatList
-            data={mediaItems} renderItem={renderMediaItem}
-            keyExtractor={(item, index) => `${item.url}-${index}`}
-            horizontal pagingEnabled showsHorizontalScrollIndicator={false}
+            data={mediaItems}
+            renderItem={renderMediaItem}
+            keyExtractor={(item, index) => `media-${index}`}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
             onViewableItemsChanged={onViewableItemsChanged}
             viewabilityConfig={{ itemVisiblePercentThreshold: 50 }}
           />
+          
           {mediaItems.length > 1 && (
             <View style={styles.pagination}>
-              {mediaItems.map((_, i) => <View key={i} style={[styles.dot, i === activeMediaIndex && styles.activeDot]} />)}
+              {mediaItems.map((_, index) => (
+                <View
+                  key={index}
+                  style={[
+                    styles.dot,
+                    index === activeMediaIndex && styles.activeDot
+                  ]}
+                />
+              ))}
             </View>
           )}
-          {post.caption ? (
-            <BlurView intensity={75} tint="light" style={styles.captionContainer}>
-                <Text style={styles.captionText} numberOfLines={2}>{post.caption}</Text>
+          
+          {post?.caption && (
+            <BlurView intensity={85} tint="light" style={styles.captionContainer}>
+              <LinearGradient
+                colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.6)']}
+                style={styles.captionHighlight}
+              />
+              <Text style={styles.captionText} numberOfLines={2}>
+                {post.caption}
+              </Text>
             </BlurView>
-          ) : null}
+          )}
         </View>
       );
     }
+    
     if (post?.caption) {
       return (
         <View style={styles.textPostContainer}>
@@ -100,45 +278,73 @@ const PostCard = ({ post, onToggleLike, onPostUpdate }) => {
         </View>
       );
     }
+    
     return <View />;
   };
 
   if (!post) return null;
 
   return (
-    <View style={styles.cardShadow}>
-      <BlurView intensity={95} tint="light" style={styles.card}>
+    <View style={styles.cardContainer}>
+      <BlurView 
+        intensity={90} 
+        tint="light" 
+        style={styles.card}
+      >
         <LinearGradient
-            colors={['rgba(255, 255, 255, 0.5)', 'rgba(255, 255, 255, 0.1)']}
-            style={styles.cardHighlight}
+          colors={['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.3)']}
+          style={styles.cardHighlight}
         />
+        
+        {/* Header */}
         <View style={styles.header}>
-          <MemberAvatar member={post} size={42} />
+          <MemberAvatar member={post} size={40} />
           <View style={styles.headerText}>
             <Text style={styles.authorName}>{post.author_name}</Text>
             <TimeAgo date={new Date(post.created_at)} style={styles.timestamp} />
           </View>
-          <TouchableOpacity style={styles.menuButton}><Ionicons name="ellipsis-horizontal" size={24} color="#3C3C43" /></TouchableOpacity>
+          <TouchableOpacity style={styles.menuButton} activeOpacity={0.6}>
+            <Ionicons name="ellipsis-horizontal" size={18} color="rgba(28, 28, 30, 0.6)" />
+          </TouchableOpacity>
         </View>
 
-        <View style={styles.contentContainer}>{renderContent()}</View>
+        {/* Content */}
+        <View style={styles.contentContainer}>
+          {renderContent()}
+        </View>
 
+        {/* Footer Actions */}
         <View style={styles.footer}>
-          <TouchableOpacity onPress={() => onToggleLike && onToggleLike(post.post_id)}>
-            <Animated.View style={[styles.actionButton, { transform: [{ scale: likeAnim }] }]}>
-              <Ionicons name={post.is_liked ? 'heart' : 'heart-outline'} size={22} color={post.is_liked ? '#FF3B30' : '#1C1C1E'} />
-              <Text style={styles.actionText}>{post.likes_count}</Text>
-            </Animated.View>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleCommentPress}><View style={styles.actionButton}><Ionicons name="chatbubble-outline" size={22} color="#1C1C1E" /><Text style={styles.actionText}>{commentsCount}</Text></View></TouchableOpacity>
-          <TouchableOpacity><View style={[styles.actionButton, { paddingHorizontal: 10 }]}><Ionicons name="share-outline" size={22} color="#1C1C1E" /></View></TouchableOpacity>
+          <Animated.View style={{ transform: [{ scale: likeAnim }] }}>
+            <CleanActionButton
+              icon={isLiked ? 'heart' : 'heart-outline'}
+              count={likesCount}
+              isActive={isLiked}
+              onPress={handleLike}
+              activeColor="#FF3B30"
+              disabled={isLiking}
+            />
+          </Animated.View>
+          
+          <CleanActionButton
+            icon="chatbubble-outline"
+            count={commentsCount}
+            onPress={handleCommentPress}
+            style={{ marginLeft: 12 }}
+          />
+          
+          <CleanActionButton
+            icon="share-outline"
+            onPress={handleShare}
+            style={{ marginLeft: 12, paddingHorizontal: 16 }}
+          />
         </View>
       </BlurView>
 
       <CommentsModal
         visible={showCommentsModal}
         onClose={() => setShowCommentsModal(false)}
-        postId={post.post_id}
+        postId={post.post_id || post.id}
         post={post}
         onCommentAdded={handleCommentAdded}
       />
@@ -147,118 +353,198 @@ const PostCard = ({ post, onToggleLike, onPostUpdate }) => {
 };
 
 const styles = StyleSheet.create({
-  cardShadow: {
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.25,
-    shadowRadius: 32,
+  cardContainer: {
+    alignItems: 'center',
+    backgroundColor: 'transparent',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
   },
   card: {
     width: CARD_WIDTH,
     height: CARD_HEIGHT,
-    borderRadius: 35,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
-    padding: 16,
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    padding: 20,
     overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   cardHighlight: {
     position: 'absolute',
-    top: 1.5, left: 1.5, right: 1.5,
-    height: '60%',
+    top: 1,
+    left: 1,
+    right: 1,
+    height: '40%',
   },
+  
+  // Header Styles
   header: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
   },
-  headerText: { flex: 1, marginLeft: 12 },
+  headerText: { 
+    flex: 1, 
+    marginLeft: 12 
+  },
   authorName: {
     fontSize: 17,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
-    fontWeight: '700',
-    color: '#000000',
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 2,
   },
   timestamp: {
     fontSize: 13,
-    color: 'rgba(0, 0, 0, 0.7)',
+    color: 'rgba(28, 28, 30, 0.6)',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
-  menuButton: { padding: 4 },
+  menuButton: { 
+    padding: 8,
+    borderRadius: 16,
+  },
+  
+  // Content Styles
   contentContainer: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 24,
     overflow: 'hidden',
-    marginTop: 12,
-    marginBottom: 10,
+    marginBottom: 16,
+    backgroundColor: 'transparent',
+  },
+  mediaContainer: {
+    flex: 1,
+    position: 'relative',
+    backgroundColor: 'transparent',
   },
   mediaItemContainer: {
-    width: CARD_WIDTH - 32,
+    width: CARD_WIDTH - 40,
     height: '100%',
+    backgroundColor: 'transparent',
   },
-  media: { width: '100%', height: '100%' },
+  media: { 
+    width: '100%', 
+    height: '100%',
+    borderRadius: 20,
+  },
+  
+  // Text Post Styles
   textPostContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20,
-    backgroundColor: 'rgba(0,0,0,0.05)',
+    padding: 24,
+    backgroundColor: 'rgba(240, 247, 255, 0.6)',
+    borderRadius: 20,
   },
   textPostCaption: {
-    fontSize: 26,
+    fontSize: 24,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Rounded' : 'System',
-    fontWeight: 'bold',
+    fontWeight: '600',
     textAlign: 'center',
-    color: '#000000',
+    color: '#1C1C1E',
+    lineHeight: 30,
   },
+  
+  // Caption Overlay Styles
   captionContainer: {
     position: 'absolute',
-    bottom: 10,
-    left: 10,
-    right: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 18,
+    bottom: 16,
+    left: 16,
+    right: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 16,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  captionHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   captionText: {
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    fontSize: 14,
-    color: 'rgba(0, 0, 0, 0.8)',
+    fontSize: 15,
+    color: '#1C1C1E',
     fontWeight: '500',
+    lineHeight: 20,
   },
+  
+  // Pagination Styles
   pagination: {
     position: 'absolute',
-    top: 8,
+    top: 12,
     alignSelf: 'center',
     flexDirection: 'row',
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 12,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    borderRadius: 10,
-    padding: 4,
   },
-  dot: { height: 6, width: 6, borderRadius: 3, backgroundColor: 'rgba(255, 255, 255, 0.6)', marginHorizontal: 3 },
-  activeDot: { backgroundColor: '#FFFFFF' },
+  dot: { 
+    height: 4, 
+    width: 4, 
+    borderRadius: 2, 
+    backgroundColor: 'rgba(255, 255, 255, 0.6)', 
+    marginHorizontal: 2 
+  },
+  activeDot: { 
+    backgroundColor: '#FFFFFF',
+    width: 8,
+  },
+  
+  // Footer Action Styles
   footer: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 10,
+  },
+  actionButtonContainer: {
+    backgroundColor: 'transparent',
+  },
+  actionButtonWrapper: {
+    backgroundColor: 'transparent',
   },
   actionButton: {
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
-    height: 42,
-    borderRadius: 21,
-    marginRight: 8,
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  activeActionButton: {
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  actionButtonHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  actionButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   actionText: {
-    marginLeft: 8,
+    marginLeft: 6,
     fontSize: 15,
-    color: '#1C1C1E',
-    fontWeight: '700',
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
 });
 

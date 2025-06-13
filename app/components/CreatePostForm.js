@@ -1,5 +1,4 @@
-// app/components/CreatePostForm.js
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,20 +10,136 @@ import {
   Image,
   Dimensions,
   Platform,
+  Animated,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { BlurView } from 'expo-blur';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createPost } from '../api/feedService';
 import MediaPickerModal from './shared/MediaPickerModal';
-import { Colors, Typography, Spacing, BorderRadius } from '../theme';
 
 const { width: screenWidth } = Dimensions.get('window');
-const CARD_WIDTH = screenWidth * 0.9;
-const CARD_ASPECT_RATIO = 3 / 4;
-const CARD_HEIGHT = CARD_WIDTH / CARD_ASPECT_RATIO;
+
+// Liquid Glass Action Button with Dark Theme
+const LiquidGlassButton = ({ 
+  title, 
+  icon, 
+  onPress, 
+  variant = 'primary', 
+  disabled = false, 
+  loading = false,
+  style 
+}) => {
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    if (disabled) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.spring(scaleAnim, {
+      toValue: 0.96,
+      useNativeDriver: true,
+      tension: 400,
+      friction: 10,
+    }).start();
+  };
+
+  const handlePressOut = () => {
+    if (disabled) return;
+    Animated.spring(scaleAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 400,
+      friction: 10,
+    }).start();
+  };
+
+  const isPrimary = variant === 'primary';
+  
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPressOut={handlePressOut}
+      disabled={disabled || loading}
+      activeOpacity={1}
+      style={[styles.buttonContainer, style]}
+    >
+      <Animated.View
+        style={[
+          { transform: [{ scale: scaleAnim }] },
+          disabled && styles.disabledContainer
+        ]}
+      >
+        <BlurView intensity={90} tint="dark" style={styles.buttonBlur}>
+          <LinearGradient
+            colors={isPrimary 
+              ? ['rgba(0, 0, 0, 0.8)', 'rgba(0, 0, 0, 0.6)']
+              : ['rgba(0, 0, 0, 0.6)', 'rgba(0, 0, 0, 0.4)']
+            }
+            style={styles.buttonHighlight}
+          />
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.05)']}
+            style={styles.buttonGlassHighlight}
+          />
+          <View style={styles.buttonContent}>
+            {loading ? (
+              <ActivityIndicator 
+                size="small" 
+                color="#FFFFFF"
+              />
+            ) : (
+              <>
+                {icon && (
+                  <Ionicons 
+                    name={icon} 
+                    size={20} 
+                    color="#FFFFFF"
+                    style={title ? { marginRight: 8 } : {}}
+                  />
+                )}
+                {title && (
+                  <Text style={styles.buttonText}>
+                    {title}
+                  </Text>
+                )}
+              </>
+            )}
+          </View>
+        </BlurView>
+      </Animated.View>
+    </TouchableOpacity>
+  );
+};
+
+// Media Preview Item
+const MediaPreviewItem = ({ item, index, onRemove, loading }) => (
+  <View style={styles.mediaPreviewItem}>
+    <Image source={{ uri: item.mediaUrl }} style={styles.mediaImage} />
+    {!loading && (
+      <TouchableOpacity
+        style={styles.removeButton}
+        onPress={() => onRemove(index)}
+        activeOpacity={0.7}
+      >
+        <BlurView intensity={80} tint="light" style={styles.removeButtonBlur}>
+          <Ionicons name="close" size={16} color="#FF3B30" />
+        </BlurView>
+      </TouchableOpacity>
+    )}
+    {item.mediaType === 'video' && (
+      <View style={styles.videoIndicator}>
+        <BlurView intensity={60} tint="dark" style={styles.videoIndicatorBlur}>
+          <Ionicons name="play" size={20} color="white" />
+        </BlurView>
+      </View>
+    )}
+  </View>
+);
 
 const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   const [caption, setCaption] = useState('');
@@ -32,6 +147,27 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   const [mediaItems, setMediaItems] = useState([]);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [error, setError] = useState(null);
+  const [isFocused, setIsFocused] = useState(false);
+  
+  const insets = useSafeAreaInsets();
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+
+  React.useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        tension: 100,
+        friction: 8,
+        useNativeDriver: true,
+      })
+    ]).start();
+  }, []);
 
   const handleMediaSelected = (selectedMedia) => {
     if (!selectedMedia || selectedMedia.length === 0) return;
@@ -59,7 +195,7 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   };
 
   const handlePost = async () => {
-    if (!caption && mediaItems.length === 0) {
+    if (!caption.trim() && mediaItems.length === 0) {
       setError('Please enter a caption or add media.');
       return;
     }
@@ -68,7 +204,7 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
       setLoading(true);
       setError(null);
 
-      const postData = { caption };
+      const postData = { caption: caption.trim() };
 
       if (mediaItems.length) {
         postData.media = mediaItems.map(m => ({
@@ -94,73 +230,134 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
     }
   };
 
+  const isPostDisabled = (!caption.trim() && mediaItems.length === 0) || loading;
+
   return (
-    <View style={styles.cardShadow}>
-      <BlurView intensity={95} tint="light" style={styles.card}>
-        <LinearGradient
-          colors={['rgba(255, 255, 255, 0.5)', 'rgba(255, 255, 255, 0.1)']}
-          style={styles.cardHighlight}
-        />
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-        >
+    <KeyboardAvoidingView 
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
+      <Animated.View 
+        style={[
+          styles.formContainer,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim }],
+            paddingTop: insets.top + 20,
+            paddingBottom: insets.bottom + 20,
+          }
+        ]}
+      >
+        <BlurView intensity={95} tint="light" style={styles.card}>
+          <LinearGradient
+            colors={['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.4)']}
+            style={styles.cardHighlight}
+          />
+          
+          {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.title}>Create a New Post</Text>
-            <TouchableOpacity onPress={onCancel} disabled={loading}>
-              <Ionicons name="close-circle" size={32} color={Colors.text.tertiary} />
+            <Text style={styles.title}>Create Post</Text>
+            <TouchableOpacity 
+              onPress={onCancel} 
+              disabled={loading}
+              style={styles.closeButton}
+              activeOpacity={0.7}
+            >
+              <BlurView intensity={60} tint="light" style={styles.closeButtonBlur}>
+                <Ionicons name="close" size={20} color="#1C1C1E" />
+              </BlurView>
             </TouchableOpacity>
           </View>
 
-          <View style={styles.inputContainer}>
-            <TextInput
-              placeholder="What's on your mind?"
-              placeholderTextColor={Colors.text.placeholder}
-              value={caption}
-              onChangeText={setCaption}
-              multiline={true}
-              style={styles.captionInput}
-            />
-          </View>
-
-          {mediaItems.length > 0 && (
-            <View style={styles.mediaPreviewContainer}>
-              {mediaItems.map((item, index) => (
-                <View key={item.id || index} style={styles.mediaPreviewItem}>
-                  <Image source={{ uri: item.mediaUrl }} style={styles.mediaImage} />
-                  {!loading && (
-                    <TouchableOpacity
-                      style={styles.removeButton}
-                      onPress={() => handleRemoveMedia(index)}
-                    >
-                      <Ionicons name="close-circle" size={24} color={Colors.error} />
-                    </TouchableOpacity>
-                  )}
-                  {item.mediaType === 'video' && (
-                    <View style={styles.videoIndicator}>
-                      <Ionicons name="play-circle" size={32} color="white" />
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-
-          <TouchableOpacity style={styles.mediaButton} onPress={() => setShowMediaPicker(true)} disabled={loading}>
-            <Ionicons name="images-outline" size={22} color={Colors.text.dark} />
-            <Text style={styles.mediaButtonText}>{mediaItems.length > 0 ? 'Add More Media' : 'Add Photos & Videos'}</Text>
-          </TouchableOpacity>
-
-          {error && <Text style={styles.errorText}>{error}</Text>}
-
-          <TouchableOpacity
-            style={[styles.postButton, (!caption && mediaItems.length === 0) && styles.disabledButton]}
-            onPress={handlePost}
-            disabled={loading || (!caption && mediaItems.length === 0)}
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.scrollContent}
+            keyboardShouldPersistTaps="handled"
           >
-            {loading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.postButtonText}>Post to Family</Text>}
-          </TouchableOpacity>
-        </ScrollView>
+            {/* Caption Input */}
+            <View style={styles.inputSection}>
+              <BlurView 
+                intensity={70} 
+                tint="light" 
+                style={[
+                  styles.inputContainer,
+                  isFocused && styles.inputFocused
+                ]}
+              >
+                <LinearGradient
+                  colors={['rgba(255, 255, 255, 0.9)', 'rgba(255, 255, 255, 0.6)']}
+                  style={styles.inputHighlight}
+                />
+                <TextInput
+                  placeholder="What's on your mind?"
+                  placeholderTextColor="rgba(28, 28, 30, 0.5)"
+                  value={caption}
+                  onChangeText={setCaption}
+                  onFocus={() => setIsFocused(true)}
+                  onBlur={() => setIsFocused(false)}
+                  multiline={true}
+                  style={styles.captionInput}
+                  maxLength={500}
+                />
+              </BlurView>
+              <Text style={styles.characterCount}>{caption.length}/500</Text>
+            </View>
+
+            {/* Media Preview */}
+            {mediaItems.length > 0 && (
+              <View style={styles.mediaSection}>
+                <Text style={styles.sectionTitle}>Media ({mediaItems.length}/4)</Text>
+                <ScrollView 
+                  horizontal 
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.mediaPreviewContainer}
+                >
+                  {mediaItems.map((item, index) => (
+                    <MediaPreviewItem
+                      key={item.id || index}
+                      item={item}
+                      index={index}
+                      onRemove={handleRemoveMedia}
+                      loading={loading}
+                    />
+                  ))}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* Error Message */}
+            {error && (
+              <View style={styles.errorContainer}>
+                <BlurView intensity={80} tint="light" style={styles.errorBlur}>
+                  <Ionicons name="alert-circle" size={20} color="#FF3B30" />
+                  <Text style={styles.errorText}>{error}</Text>
+                </BlurView>
+              </View>
+            )}
+
+            {/* Action Buttons */}
+            <View style={styles.actionsContainer}>
+              <LiquidGlassButton
+                title={mediaItems.length > 0 ? 'Add More Media' : 'Add Photos & Videos'}
+                icon="images-outline"
+                onPress={() => setShowMediaPicker(true)}
+                disabled={loading || mediaItems.length >= 4}
+                variant="secondary"
+                style={styles.mediaButton}
+              />
+
+              <LiquidGlassButton
+                title="Post to Family"
+                icon="send"
+                onPress={handlePost}
+                disabled={isPostDisabled}
+                loading={loading}
+                variant="primary"
+                style={styles.postButton}
+              />
+            </View>
+          </ScrollView>
+        </BlurView>
 
         <MediaPickerModal
           visible={showMediaPicker}
@@ -168,129 +365,250 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
           onMediaSelected={handleMediaSelected}
           allowMultiple={true}
           showVideos={true}
-          maxItems={4}
+          maxItems={4 - mediaItems.length}
         />
-      </BlurView>
-    </View>
+      </Animated.View>
+    </KeyboardAvoidingView>
   );
 };
 
 const styles = StyleSheet.create({
-  cardShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.25,
-    shadowRadius: 32,
-    alignSelf: 'center',
-    // marginTop: Spacing['5xl'], // This was removed
+  container: {
+    flex: 1,
+  },
+  formContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+    justifyContent: 'center',
   },
   card: {
-    width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    borderRadius: 35,
-    borderWidth: 1.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderRadius: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.1,
+    shadowRadius: 32,
+    elevation: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    maxHeight: '85%',
   },
   cardHighlight: {
     position: 'absolute',
-    top: 1.5,
-    left: 1.5,
-    right: 1.5,
-    height: '60%',
+    top: 1,
+    left: 1,
+    right: 1,
+    height: '40%',
   },
-  scrollContent: {
-    padding: Spacing.xl,
-  },
+  
+  // Header
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: Spacing.lg,
+    paddingHorizontal: 24,
+    paddingVertical: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
   },
   title: {
-    fontSize: Typography.sizes['2xl'],
-    fontWeight: Typography.weights.bold,
-    color: Colors.text.dark,
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1C1C1E',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
   },
+  closeButton: {
+    padding: 4,
+  },
+  closeButtonBlur: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  
+  // Content
+  scrollContent: {
+    padding: 24,
+  },
+  
+  // Input Section
+  inputSection: {
+    marginBottom: 24,
+  },
   inputContainer: {
-    backgroundColor: 'rgba(255, 255, 255, 0.5)',
-    borderRadius: BorderRadius.md,
-    padding: Spacing.md,
+    borderRadius: 20,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     minHeight: 120,
-    marginBottom: Spacing.lg,
+  },
+  inputFocused: {
+    borderColor: 'rgba(0, 122, 255, 0.4)',
+    borderWidth: 1.5,
+  },
+  inputHighlight: {
+    position: 'absolute',
+    top: 1,
+    left: 1,
+    right: 1,
+    height: '30%',
   },
   captionInput: {
-    fontSize: Typography.sizes.base,
-    color: Colors.text.dark,
+    fontSize: 16,
+    color: '#1C1C1E',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    padding: 16,
+    textAlignVertical: 'top',
+    minHeight: 100,
+  },
+  characterCount: {
+    fontSize: 12,
+    color: 'rgba(28, 28, 30, 0.6)',
+    textAlign: 'right',
+    marginTop: 8,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+  
+  // Media Section
+  mediaSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   mediaPreviewContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: Spacing.md,
+    paddingVertical: 8,
   },
   mediaPreviewItem: {
     width: 80,
     height: 80,
-    borderRadius: BorderRadius.sm,
-    margin: Spacing.xs,
+    borderRadius: 12,
+    marginRight: 12,
+    position: 'relative',
+    overflow: 'hidden',
   },
   mediaImage: {
     width: '100%',
     height: '100%',
-    borderRadius: BorderRadius.sm,
   },
   removeButton: {
     position: 'absolute',
-    top: -5,
-    right: -5,
-    backgroundColor: 'white',
-    borderRadius: 12,
+    top: -4,
+    right: -4,
   },
-  videoIndicator: {
-    ...StyleSheet.absoluteFillObject,
+  removeButtonBlur: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  },
+  videoIndicator: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+  },
+  videoIndicatorBlur: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Error
+  errorContainer: {
+    marginBottom: 24,
+  },
+  errorBlur: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    marginLeft: 8,
+    flex: 1,
+  },
+  
+  // Actions
+  actionsContainer: {
+    gap: 16,
   },
   mediaButton: {
+    marginBottom: 0,
+  },
+  postButton: {
+    marginBottom: 0,
+  },
+  
+  // Button Styles
+  buttonContainer: {
+    borderRadius: 24,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  buttonBlur: {
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.2)',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  buttonHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  buttonGlassHighlight: {
+    position: 'absolute',
+    top: 1,
+    left: 1,
+    right: 1,
+    height: '40%',
+  },
+  buttonContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.4)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.6)',
-    height: 50,
-    borderRadius: 25,
-    marginBottom: Spacing.lg,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
-  mediaButtonText: {
-    fontSize: Typography.sizes.base,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.text.dark,
-    marginLeft: Spacing.sm,
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    color: '#FFFFFF',
   },
-  errorText: {
-    color: Colors.error,
-    textAlign: 'center',
-    marginBottom: Spacing.md,
-  },
-  postButton: {
-    backgroundColor: Colors.primary,
-    height: 50,
-    borderRadius: 25,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: Colors.text.tertiary,
-  },
-  postButtonText: {
-    color: 'white',
-    fontSize: Typography.sizes.lg,
-    fontWeight: Typography.weights.bold,
+  disabledContainer: {
+    opacity: 0.4,
   },
 });
 
