@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Colors, Shadows, Spacing } from '../theme';
 
 const FloatingCreateButton = () => {
 
@@ -16,13 +17,13 @@ const FloatingCreateButton = () => {
     <View style={styles.buttonContainer}>
       <TouchableOpacity style={styles.button} onPress={handlePress} activeOpacity={0.8}>
         <LinearGradient
-            colors={['#00d2ff', '#3a7bd5']}
+            colors={Colors.accentGradient}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
             style={styles.gradient}
         >
             <View style={styles.innerHighlight} />
-            <Ionicons name="add" size={34} color="#FFFFFF" style={styles.icon} />
+            <Ionicons name="add" size={34} color={Colors.text.primary} style={styles.icon} />
         </LinearGradient>
       </TouchableOpacity>
     </View>
@@ -33,14 +34,10 @@ const styles = StyleSheet.create({
   buttonContainer: {
     position: 'absolute',
     bottom: Platform.OS === 'ios' ? 100 : 80,
-    right: 20,
+    right: Spacing.xl,
     width: 64,
     height: 64,
-    shadowColor: '#00a2ff',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.5,
-    shadowRadius: 15,
-    elevation: 16,
+    ...Shadows.colored,
   },
   button: {
     width: 64,
@@ -54,14 +51,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   innerHighlight: {
-      position: 'absolute',
-      top: 2,
-      left: 2,
-      right: 2,
-      bottom: 2,
-      borderRadius: 30,
-      borderWidth: 1.5,
-      borderColor: 'rgba(255, 255, 255, 0.4)',
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderRadius: 30,
+    borderWidth: 1.5,
+    borderColor: Colors.glass.strong,
   },
   icon: {
     textShadowColor: 'rgba(0, 0, 0, 0.25)',

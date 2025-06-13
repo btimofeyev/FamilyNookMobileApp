@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import CreatePostForm from '../components/CreatePostForm';
 import { useFamily } from '../../context/FamilyContext';
+import { Colors } from '../theme';
 import * as Haptics from 'expo-haptics';
 
 export default function CreatePostScreen() {
@@ -49,19 +50,17 @@ export default function CreatePostScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient
-        colors={['#0f2027', '#203a43', '#2c5364']}
+        colors={Colors.background.gradient}
         style={StyleSheet.absoluteFill}
       />
       <StatusBar style="light" />
       
       <SafeAreaView style={styles.safeArea}>
-        <View style={styles.contentContainer}>
-          <CreatePostForm
-            familyId={selectedFamily.family_id}
-            onPostCreated={handlePostCreated}
-            onCancel={handleCancel}
-          />
-        </View>
+        <CreatePostForm
+          familyId={selectedFamily.family_id}
+          onPostCreated={handlePostCreated}
+          onCancel={handleCancel}
+        />
       </SafeAreaView>
     </View>
   );
@@ -73,10 +72,6 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-  },
-  contentContainer: {
-    flex: 1,
-    padding: 20,
     justifyContent: 'center',
   },
 });

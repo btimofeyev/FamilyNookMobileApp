@@ -2,18 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
-  TextInput,
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
   FlatList,
   Keyboard,
-  Platform
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { getComments, addComment } from '../api/feedService';
 import CommentItem from './CommentItem';
-import { BlurView } from 'expo-blur';
+import GlassInput from './shared/GlassInput';
+import { Colors, Typography, Spacing } from '../theme';
 
 export default function CommentSection({ postId, onCommentAdded }) {
   const [comments, setComments] = useState([]);
@@ -59,25 +58,32 @@ export default function CommentSection({ postId, onCommentAdded }) {
     <View style={styles.wrapper}>
       {/* Glass Input Field */}
       <View style={styles.inputContainer}>
-        <BlurView intensity={100} tint="light" style={styles.inputBlurView}>
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              placeholder="Add a comment..."
-              placeholderTextColor="rgba(60, 60, 67, 0.6)"
-              value={newComment}
-              onChangeText={setNewComment}
-              keyboardAppearance="light"
+        <GlassInput
+          placeholder="Add a comment..."
+          value={newComment}
+          onChangeText={setNewComment}
+          style={styles.commentInput}
+        />
+        <TouchableOpacity 
+          style={styles.sendButton} 
+          onPress={handleAddComment} 
+          disabled={submitting || !newComment.trim()}
+        >
+          {submitting ? (
+            <ActivityIndicator size="small" color={Colors.primary} />
+          ) : (
+            <Ionicons 
+              name="arrow-up-circle-fill" 
+              size={32} 
+              color={newComment.trim() ? Colors.primary : Colors.text.tertiary} 
             />
-            <TouchableOpacity style={styles.sendButton} onPress={handleAddComment} disabled={submitting}>
-              {submitting ? <ActivityIndicator size="small" color="#007AFF"/> : <Ionicons name="arrow-up-circle-fill" size={32} color="#007AFF" />}
-            </TouchableOpacity>
-        </BlurView>
+          )}
+        </TouchableOpacity>
       </View>
 
       {/* Comments List */}
       {loading ? (
-        <ActivityIndicator style={{ marginTop: 20 }} />
+        <ActivityIndicator style={styles.loadingIndicator} color={Colors.primary} />
       ) : (
         <FlatList
           data={comments}
@@ -86,7 +92,8 @@ export default function CommentSection({ postId, onCommentAdded }) {
           ListEmptyComponent={
             <Text style={styles.emptyText}>Be the first to comment.</Text>
           }
-          contentContainerStyle={{ paddingTop: 10 }}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
         />
       )}
     </View>
@@ -94,44 +101,37 @@ export default function CommentSection({ postId, onCommentAdded }) {
 }
 
 const styles = StyleSheet.create({
-    wrapper: {
-        marginTop: 15,
-        borderTopWidth: 1,
-        borderTopColor: 'rgba(0, 0, 0, 0.1)',
-        paddingTop: 15,
-    },
-    inputContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        paddingHorizontal: 5,
-        marginBottom: 10,
-    },
-    inputBlurView: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderRadius: 22,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.5)',
-    },
-    input: {
-        flex: 1,
-        paddingVertical: 10,
-        paddingHorizontal: 15,
-        fontSize: 16,
-        color: '#000',
-        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    },
-    sendButton: {
-        padding: 5,
-        justifyContent: 'center',
-        alignItems: 'center',
-    },
-    emptyText: {
-        textAlign: 'center',
-        color: 'rgba(60, 60, 67, 0.6)',
-        marginTop: 20,
-        fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
-    }
+  wrapper: {
+    flex: 1,
+    marginTop: Spacing.md,
+  },
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    marginBottom: Spacing.lg,
+    gap: Spacing.sm,
+  },
+  commentInput: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  sendButton: {
+    padding: Spacing.xs,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  loadingIndicator: {
+    marginTop: Spacing.xl,
+  },
+  listContent: {
+    paddingTop: Spacing.sm,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: Colors.text.secondary,
+    marginTop: Spacing.xl,
+    fontSize: Typography.sizes.base,
+    fontFamily: Typography.fonts.text,
+  },
 });

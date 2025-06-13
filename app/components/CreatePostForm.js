@@ -4,20 +4,20 @@ import {
   View, 
   Text, 
   StyleSheet, 
-  TextInput, 
   TouchableOpacity, 
   ActivityIndicator, 
-  Platform,
   Alert,
   ScrollView,
   Image
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { createPost } from '../api/feedService';
 import MediaPickerModal from './shared/MediaPickerModal';
+import GlassCard from './shared/GlassCard';
+import GlassInput from './shared/GlassInput';
+import GlassButton from './shared/GlassButton';
+import { Colors, Typography, Spacing, BorderRadius } from '../theme';
 
 const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   const [caption, setCaption] = useState('');
@@ -99,19 +99,16 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
   };
 
   return (
-    <BlurView intensity={20} tint="dark" style={styles.container}>
+    <GlassCard style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.inputContainer}>
-          <TextInput
-            style={styles.input}
-            placeholder="What's on your mind?"
-            placeholderTextColor="#8E8E93"
-            multiline
-            value={caption}
-            onChangeText={setCaption}
-            editable={!loading}
-          />
-        </View>
+        <GlassInput
+          placeholder="What's on your mind?"
+          value={caption}
+          onChangeText={setCaption}
+          multiline={true}
+          numberOfLines={4}
+          style={styles.captionInput}
+        />
         
         {/* Media Preview */}
         {mediaItems.length > 0 && (
@@ -130,13 +127,13 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
                       style={styles.removeButton}
                       onPress={() => handleRemoveMedia(index)}
                     >
-                      <Ionicons name="close-circle" size={24} color="rgba(255, 69, 58, 0.9)" />
+                      <Ionicons name="close-circle" size={24} color={Colors.error} />
                     </TouchableOpacity>
                   )}
                   
                   {item.mediaType === 'video' && (
                     <View style={styles.videoIndicator}>
-                      <Ionicons name="play-circle" size={32} color="rgba(255, 255, 255, 0.8)" />
+                      <Ionicons name="play-circle" size={32} color={Colors.text.primary} />
                     </View>
                   )}
                 </View>
@@ -153,47 +150,33 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
         )}
         
         {/* Media Selection Button */}
-        <TouchableOpacity 
-          style={styles.mediaButton}
+        <GlassButton
+          title={mediaItems.length > 0 ? 'Add More Media' : 'Add Photos & Videos'}
+          icon="images-outline"
+          variant="glass"
           onPress={() => setShowMediaPicker(true)}
           disabled={loading}
-        >
-          <Ionicons name="images-outline" size={24} color="#3BAFBC" />
-          <Text style={styles.mediaButtonText}>
-            {mediaItems.length > 0 ? 'Add More Media' : 'Add Photos & Videos'}
-          </Text>
-        </TouchableOpacity>
+          style={styles.mediaButton}
+        />
         
         <View style={styles.buttonContainer}>
-          <TouchableOpacity 
-            style={styles.cancelButton} 
+          <GlassButton
+            title="Cancel"
+            variant="glass"
             onPress={onCancel}
             disabled={loading}
-          >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
-          </TouchableOpacity>
+            style={styles.cancelButton}
+          />
           
-          <TouchableOpacity 
-            style={[
-              styles.postButton,
-              (!caption && mediaItems.length === 0) && styles.disabledButton
-            ]} 
+          <GlassButton
+            title="Post"
+            variant="primary"
             onPress={handlePost}
-            disabled={loading || (!caption && mediaItems.length === 0)}
-          >
-            <LinearGradient
-              colors={['#3BAFBC', '#1E2B2F']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.gradientButton}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#F5F5F7" />
-              ) : (
-                <Text style={styles.postButtonText}>Post</Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+            loading={loading}
+            disabled={!caption && mediaItems.length === 0}
+            gradientColors={[Colors.primary, Colors.primaryDark]}
+            style={styles.postButton}
+          />
         </View>
       </ScrollView>
       
@@ -206,42 +189,31 @@ const CreatePostForm = ({ familyId, onPostCreated, onCancel }) => {
         showVideos={true}
         maxItems={4}
       />
-    </BlurView>
+    </GlassCard>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 16,
-    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback
+    margin: Spacing.lg,
   },
   scrollContent: {
-    padding: 16,
+    padding: Spacing.lg,
   },
-  inputContainer: {
-    marginBottom: 16,
-  },
-  input: {
-    backgroundColor: 'rgba(44, 44, 46, 0.8)',
-    borderRadius: 12,
-    padding: 16,
-    color: '#F5F5F7',
-    minHeight: 100,
-    fontSize: 16,
-    textAlignVertical: 'top',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  captionInput: {
+    marginBottom: Spacing.lg,
   },
   mediaPreviewContainer: {
-    marginBottom: 16,
+    marginBottom: Spacing.lg,
   },
   mediaScrollContainer: {
-    paddingBottom: 8,
+    paddingBottom: Spacing.sm,
   },
   mediaPreviewItem: {
     width: 100,
     height: 100,
-    borderRadius: 8,
-    marginRight: 8,
+    borderRadius: BorderRadius.md,
+    marginRight: Spacing.sm,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -251,9 +223,11 @@ const styles = StyleSheet.create({
   },
   removeButton: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: Spacing.xs,
+    right: Spacing.xs,
     zIndex: 2,
+    backgroundColor: Colors.glass.medium,
+    borderRadius: 12,
   },
   videoIndicator: {
     position: 'absolute',
@@ -266,69 +240,31 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
   errorContainer: {
-    backgroundColor: 'rgba(255, 69, 58, 0.2)',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
+    backgroundColor: `${Colors.error}20`,
+    padding: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.lg,
+    borderWidth: 1,
+    borderColor: `${Colors.error}40`,
   },
   errorText: {
-    color: '#FF453A',
-    fontSize: 14,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    color: Colors.error,
+    fontSize: Typography.sizes.sm,
+    fontFamily: Typography.fonts.text,
   },
   mediaButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(59, 175, 188, 0.2)',
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    marginBottom: 16,
-  },
-  mediaButtonText: {
-    color: '#3BAFBC',
-    fontSize: 16,
-    fontWeight: '500',
-    marginLeft: 8,
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    marginBottom: Spacing.lg,
   },
   buttonContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: Spacing.md,
   },
   cancelButton: {
-    backgroundColor: 'rgba(44, 44, 46, 0.8)',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    color: '#AEAEB2',
-    fontSize: 16,
-    fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    flex: 1,
   },
   postButton: {
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  gradientButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 36,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  postButtonText: {
-    color: '#F5F5F7',
-    fontSize: 16,
-    fontWeight: '600',
-    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    flex: 1,
   },
 });
 
