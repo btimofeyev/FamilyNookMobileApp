@@ -9,8 +9,8 @@ export const useFeedManager = () => {
   const { selectedFamily } = useFamily();
 
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(false); // For initial load/refresh
-  const [loadingMore, setLoadingMore] = useState(false); // NEW: For subsequent pages
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -23,7 +23,6 @@ export const useFeedManager = () => {
   }, []);
 
   const handleApiError = useCallback(async (error) => {
-    // Be more specific about when to force logout
     if (error.response?.status === 401 && error.response?.data?.error?.includes('token')) {
       Alert.alert("Session Expired", "Please log in again.", [{ text: "OK", onPress: () => logout() }]);
     } else if (error.response?.status === 403) {
@@ -74,7 +73,10 @@ export const useFeedManager = () => {
         if (isRefresh) {
           return newPosts;
         } else {
-          return [...prevPosts, ...newPosts];
+          // Avoid duplicates by filtering out posts that already exist
+          const existingIds = new Set(prevPosts.map(p => p.post_id || p.id));
+          const uniqueNewPosts = newPosts.filter(p => !existingIds.has(p.post_id || p.id));
+          return [...prevPosts, ...uniqueNewPosts];
         }
       });
       
@@ -106,6 +108,10 @@ export const useFeedManager = () => {
   }, [selectedFamily?.family_id, page, loading, loadingMore, hasMore, handleApiError, isMounted]);
 
   const handleRefresh = useCallback(async () => {
+    console.log('Refreshing feed...');
+    setPage(1);
+    setHasMore(true);
+    setError(null);
     await fetchPosts(true);
   }, [fetchPosts]);
 
@@ -123,10 +129,13 @@ export const useFeedManager = () => {
   const handleToggleLike = useCallback(async (postId) => {
     try {
       const optimisticUpdate = posts.map(post => 
-        post.id === postId ? { 
+        post.id === postId || post.post_id === postId ? { 
           ...post, 
           liked: !post.liked,
-          likes_count: post.liked ? post.likes_count - 1 : post.likes_count + 1
+          is_liked: !post.is_liked,
+          likes_count: post.liked || post.is_liked ? 
+            (post.likes_count || 0) - 1 : 
+            (post.likes_count || 0) + 1
         } : post
       );
       setPosts(optimisticUpdate);
@@ -142,17 +151,29 @@ export const useFeedManager = () => {
   const handleDeletePost = useCallback(async (postId) => {
     try {
       await deletePostService(postId);
-      setPosts(prevPosts => prevPosts.filter(post => post.id !== postId));
+      setPosts(prevPosts => prevPosts.filter(post => (post.id || post.post_id) !== postId));
     } catch (error) {
       await handleApiError(error);
     }
   }, [handleApiError]);
 
+  const updatePost = useCallback((updatedPost) => {
+    setPosts(prevPosts => 
+      prevPosts.map(post => 
+        (post.id || post.post_id) === (updatedPost.id || updatedPost.post_id) 
+          ? { ...post, ...updatedPost } 
+          : post
+      )
+    );
+  }, []);
+
   // Load initial posts when family changes
   useEffect(() => {
     if (selectedFamily?.family_id && isMounted) {
+      console.log('Family changed, resetting pagination and fetching posts');
       setPage(1);
       setHasMore(true);
+      setError(null);
       fetchPosts(true);
     }
   }, [selectedFamily?.family_id, isMounted]);
@@ -165,6 +186,13 @@ export const useFeedManager = () => {
     refreshing,
     hasMore,
     selectedFamily,
+    // Export the correct function names that your feed.js expects
+    refetch: handleRefresh,
+    loadNextPage: handleLoadMore,
+    toggleLike: handleToggleLike,
+    updatePost,
+    deletePost: handleDeletePost,
+    // Also keep the original names for backward compatibility
     handleRefresh,
     handleLoadMore,
     handleToggleLike,

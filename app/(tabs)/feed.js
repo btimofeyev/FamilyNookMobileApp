@@ -51,14 +51,12 @@ const CleanFamilyHeader = ({ selectedFamily, onFamilySelectorPress, scrollY, top
         }
       ]}
     >
-      {/* Subtle background blur - much lighter than before */}
       <BlurView intensity={Platform.OS === 'ios' ? 95 : 80} tint="systemUltraThinMaterialLight" style={styles.headerBlur}>
-        {/* Soft blue accent highlight */}
         <LinearGradient
           colors={[
-            'rgba(224, 242, 254, 0.95)', // Soft blue from login (e0f2fe)
-            'rgba(186, 230, 253, 0.90)', // Medium blue from login (bae6fd) 
-            'rgba(125, 211, 252, 0.85)'  // Brighter blue from login (7dd3fc)
+            'rgba(224, 242, 254, 0.95)',
+            'rgba(186, 230, 253, 0.90)',
+            'rgba(125, 211, 252, 0.85)'
           ]}
           style={styles.headerHighlight}
         />
@@ -120,9 +118,10 @@ export default function FeedScreen() {
     loading,
     refreshing,
     loadingMore,
+    hasMore,
     error,
-    loadNextPage,
     refetch,
+    loadNextPage,
     toggleLike,
     updatePost,
   } = useFeedManager();
@@ -143,6 +142,27 @@ export default function FeedScreen() {
     { useNativeDriver: false }
   );
 
+  // Handle end reached with better logging
+  const handleEndReached = useCallback(() => {
+    console.log('🔍 End reached triggered', {
+      hasMore,
+      loadingMore,
+      loading,
+      postsCount: posts.length
+    });
+    
+    if (hasMore && !loadingMore && !loading) {
+      console.log('✅ Loading next page...');
+      loadNextPage();
+    } else {
+      console.log('❌ Not loading because:', {
+        hasMore,
+        loadingMore,
+        loading
+      });
+    }
+  }, [hasMore, loadingMore, loading, loadNextPage, posts.length]);
+
   // Render individual post item
   const renderPost = useCallback(({ item }) => (
     <View style={styles.postContainer}>
@@ -154,33 +174,48 @@ export default function FeedScreen() {
     </View>
   ), [toggleLike, updatePost]);
 
-  // Footer loader component
-  const renderFooter = () => {
-    if (!loadingMore) return null;
-    return (
-      <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#7dd3fc" />
-        <Text style={styles.loadingMoreText}>Loading more...</Text>
-      </View>
-    );
-  };
+  // Enhanced Footer loader component
+  const renderFooter = useCallback(() => {
+    if (loadingMore) {
+      return (
+        <View style={styles.footerLoader}>
+          <BlurView intensity={80} tint="systemUltraThinMaterialLight" style={styles.footerLoaderBlur}>
+            <ActivityIndicator size="small" color="#7dd3fc" />
+            <Text style={styles.loadingMoreText}>Loading more posts...</Text>
+          </BlurView>
+        </View>
+      );
+    }
+    
+    if (!hasMore && posts.length > 0) {
+      return (
+        <View style={styles.endOfFeedContainer}>
+          <BlurView intensity={80} tint="systemUltraThinMaterialLight" style={styles.endOfFeedBlur}>
+            <Ionicons name="checkmark-circle" size={20} color="#7dd3fc" />
+            <Text style={styles.endOfFeedText}>You're all caught up!</Text>
+          </BlurView>
+        </View>
+      );
+    }
+    
+    return null;
+  }, [loadingMore, hasMore, posts.length]);
 
   // Loading state
   if (loading && posts.length === 0) {
     return (
       <View style={styles.loadingContainer}>
         <BlurView intensity={Platform.OS === 'ios' ? 95 : 85} tint="systemUltraThinMaterialLight" style={styles.loadingCard}>
-        {/* Soft blue accent highlight */}
-        <LinearGradient
-          colors={[
-            'rgba(224, 242, 254, 0.95)', 
-            'rgba(186, 230, 253, 0.85)',
-            'rgba(125, 211, 252, 0.75)'
-          ]}
-          style={styles.loadingHighlight}
-        />
-        <ActivityIndicator size="large" color="#7dd3fc" />
-        <Text style={styles.loadingText}>Loading your family moments...</Text>
+          <LinearGradient
+            colors={[
+              'rgba(224, 242, 254, 0.95)', 
+              'rgba(186, 230, 253, 0.85)',
+              'rgba(125, 211, 252, 0.75)'
+            ]}
+            style={styles.loadingHighlight}
+          />
+          <ActivityIndicator size="large" color="#7dd3fc" />
+          <Text style={styles.loadingText}>Loading your family moments...</Text>
         </BlurView>
       </View>
     );
@@ -190,17 +225,15 @@ export default function FeedScreen() {
     <View style={styles.container}>
       <StatusBar style="dark" backgroundColor="transparent" translucent />
       
-      {/* Soft blue background gradient - matching login/register theme */}
       <LinearGradient
         colors={[
-          '#f0f9ff', // Very light blue
-          '#e0f2fe', // Light sky blue (from login)
-          '#f8faff'  // Almost white with blue tint
+          '#f0f9ff',
+          '#e0f2fe',
+          '#f8faff'
         ]}
         style={styles.backgroundGradient}
       />
 
-      {/* Header */}
       <CleanFamilyHeader
         selectedFamily={selectedFamily}
         onFamilySelectorPress={handleFamilySelectorPress}
@@ -208,7 +241,6 @@ export default function FeedScreen() {
         topInset={topInset}
       />
 
-      {/* Posts List */}
       <AnimatedFlatList
         data={posts}
         renderItem={renderPost}
@@ -225,18 +257,22 @@ export default function FeedScreen() {
         scrollEventThrottle={16}
         onRefresh={refetch}
         refreshing={refreshing}
-        onEndReached={loadNextPage}
-        onEndReachedThreshold={0.3}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5} // Increased threshold for better triggering
         ListFooterComponent={renderFooter}
         ListEmptyComponent={!loading ? <CleanEmptyState /> : null}
-        getItemLayout={(data, index) => ({
-          length: ITEM_HEIGHT,
-          offset: ITEM_HEIGHT * index,
-          index,
-        })}
+        // Remove getItemLayout for dynamic content
         removeClippedSubviews={false}
         maxToRenderPerBatch={5}
         windowSize={10}
+        initialNumToRender={5}
+        // Add debug info
+        onScrollBeginDrag={() => console.log('📱 User started scrolling')}
+        onMomentumScrollEnd={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+          const distanceFromEnd = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+          console.log('📏 Distance from end:', distanceFromEnd);
+        }}
       />
 
       <FloatingCreateButton />
@@ -252,7 +288,7 @@ export default function FeedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f0f9ff', // Soft blue background
+    backgroundColor: '#f0f9ff',
   },
   backgroundGradient: {
     position: 'absolute',
@@ -262,7 +298,7 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   
-  // Header Styles - Ultra Clean
+  // Header Styles
   headerContainer: {
     position: 'absolute',
     top: 0,
@@ -275,164 +311,168 @@ const styles = StyleSheet.create({
   headerBlur: {
     borderRadius: Platform.OS === 'android' ? 16 : 20,
     overflow: 'hidden',
-    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderWidth: Platform.OS === 'android' ? 0.5 : 0,
     borderColor: 'rgba(255, 255, 255, 0.8)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: Platform.OS === 'android' ? 2 : 4 },
-    shadowOpacity: Platform.OS === 'android' ? 0.04 : 0.06,
-    shadowRadius: Platform.OS === 'android' ? 8 : 12,
-    elevation: Platform.OS === 'android' ? 2 : 4,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerHighlight: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '100%',
-    borderRadius: Platform.OS === 'android' ? 16 : 20,
+    bottom: 0,
   },
   familySelector: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: Platform.OS === 'android' ? 16 : 20,
-    paddingVertical: Platform.OS === 'android' ? 12 : 16,
-    minHeight: Platform.OS === 'android' ? 48 : 56,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
   },
   familyName: {
-    fontSize: Platform.OS === 'android' ? 16 : 18,
+    fontSize: 20,
     fontWeight: '600',
     color: '#1C1C1E',
-    marginRight: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
-    textAlign: 'center',
-    letterSpacing: Platform.OS === 'android' ? 0.2 : 0,
+    letterSpacing: -0.4,
   },
   chevronContainer: {
+    marginLeft: 8,
     padding: 2,
-    opacity: 0.8,
   },
 
-  // List Styles - More spacing for Android
-  listContainer: {
-    paddingHorizontal: 0,
-  },
-  postContainer: {
-    marginBottom: Platform.OS === 'android' ? 28 : 24,
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-  },
-
-  // Loading States - Lighter
+  // Loading States
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f0f9ff', // Soft blue background
-    paddingHorizontal: 20,
+    padding: 20,
   },
   loadingCard: {
-    paddingVertical: Platform.OS === 'android' ? 28 : 32,
-    paddingHorizontal: Platform.OS === 'android' ? 24 : 28,
-    borderRadius: Platform.OS === 'android' ? 20 : 24,
+    padding: 32,
+    borderRadius: 24,
     alignItems: 'center',
-    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: Platform.OS === 'android' ? 4 : 8 },
-    shadowOpacity: Platform.OS === 'android' ? 0.04 : 0.06,
-    shadowRadius: Platform.OS === 'android' ? 12 : 16,
-    elevation: Platform.OS === 'android' ? 4 : 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    minWidth: 200,
   },
   loadingHighlight: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '100%',
-    borderRadius: Platform.OS === 'android' ? 20 : 24,
+    bottom: 0,
   },
   loadingText: {
     marginTop: 16,
     fontSize: 16,
-    fontWeight: '500',
     color: '#1C1C1E',
+    fontWeight: '500',
+    textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
+
+  // List Styles
+  listContainer: {
+    flexGrow: 1,
+  },
+  postContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
+
+  // Footer Loader Styles
   footerLoader: {
     paddingVertical: 20,
+    paddingHorizontal: 16,
     alignItems: 'center',
-    backgroundColor: 'transparent',
+  },
+  footerLoaderBlur: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
     flexDirection: 'row',
-    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
   },
   loadingMoreText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#7dd3fc', // Soft blue accent
+    color: '#1C1C1E',
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
 
-  // Empty State Styles - Lighter
+  // End of Feed Styles
+  endOfFeedContainer: {
+    paddingVertical: 20,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  endOfFeedBlur: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+  },
+  endOfFeedText: {
+    marginLeft: 6,
+    fontSize: 14,
+    color: '#1C1C1E',
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+  },
+
+  // Empty State Styles
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginTop: 60,
-    backgroundColor: 'transparent',
+    paddingHorizontal: 40,
+    paddingVertical: 60,
   },
   emptyCard: {
-    width: screenWidth * 0.85,
-    paddingVertical: Platform.OS === 'android' ? 40 : 48,
-    paddingHorizontal: Platform.OS === 'android' ? 28 : 32,
-    borderRadius: Platform.OS === 'android' ? 24 : 32,
+    padding: 40,
+    borderRadius: 24,
     alignItems: 'center',
-    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
-    borderColor: 'rgba(255, 255, 255, 0.8)',
+    maxWidth: 320,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: Platform.OS === 'android' ? 4 : 8 },
-    shadowOpacity: Platform.OS === 'android' ? 0.04 : 0.06,
-    shadowRadius: Platform.OS === 'android' ? 12 : 16,
-    elevation: Platform.OS === 'android' ? 4 : 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   emptyCardHighlight: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    height: '100%',
-    borderRadius: Platform.OS === 'android' ? 24 : 32,
+    bottom: 0,
   },
   emptyContent: {
     alignItems: 'center',
   },
   emptyIconContainer: {
-    marginBottom: 24,
-    width: Platform.OS === 'android' ? 72 : 80,
-    height: Platform.OS === 'android' ? 72 : 80,
-    borderRadius: Platform.OS === 'android' ? 36 : 40,
-    backgroundColor: 'rgba(125, 211, 252, 0.12)', // Soft blue accent
-    justifyContent: 'center',
-    alignItems: 'center',
+    marginBottom: 16,
+    padding: 16,
+    borderRadius: 20,
+    backgroundColor: 'rgba(125, 211, 252, 0.2)',
   },
   emptyTitle: {
-    fontSize: Platform.OS === 'android' ? 20 : 22,
+    fontSize: 20,
     fontWeight: '600',
     color: '#1C1C1E',
+    marginBottom: 8,
     textAlign: 'center',
-    marginBottom: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
   },
   emptySubtitle: {
     fontSize: 16,
-    color: 'rgba(28, 28, 30, 0.6)',
+    color: '#8E8E93',
     textAlign: 'center',
     lineHeight: 22,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
