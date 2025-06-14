@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, TouchableWithoutFeedback, Keyboard } from 'react-native';
+import { View, StyleSheet, TouchableWithoutFeedback, Keyboard, Platform } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
@@ -26,12 +26,12 @@ const CreatePostScreen = () => {
       <View style={styles.container}>
         <StatusBar style="dark" />
         
-        {/* Clean Background matching feed screen */}
+        {/* Soft blue background matching login/register and feed themes */}
         <LinearGradient
           colors={[
-            '#F8FAFF',
-            '#F0F7FF',
-            '#E8F4FF',
+            '#f0f9ff', // Very light blue
+            '#e0f2fe', // Light sky blue (from login)
+            '#bae6fd', // Medium blue (from login)
           ]}
           style={styles.background}
         />
@@ -49,7 +49,7 @@ const CreatePostScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: '#f0f9ff', // Soft blue background
   },
   background: {
     ...StyleSheet.absoluteFillObject,

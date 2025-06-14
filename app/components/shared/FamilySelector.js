@@ -8,6 +8,7 @@ import {
   Modal,
   Animated,
   Dimensions,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
@@ -26,12 +27,15 @@ const FamilySelector = ({ visible, onClose }) => {
     if (visible) {
       Animated.spring(slideAnim, {
         toValue: 0,
-        ...Animations.spring,
+        useNativeDriver: true,
+        tension: 300,
+        friction: 30,
       }).start();
     } else {
-      Animated.spring(slideAnim, {
+      Animated.timing(slideAnim, {
         toValue: screenHeight,
-        ...Animations.spring,
+        duration: 250,
+        useNativeDriver: true,
       }).start();
     }
   }, [visible]);
@@ -66,92 +70,120 @@ const FamilySelector = ({ visible, onClose }) => {
       transparent={true}
       animationType="none"
       onRequestClose={onClose}
+      statusBarTranslucent={Platform.OS === 'android'}
     >
-      {/* Backdrop */}
+      {/* Backdrop - Much lighter */}
       <TouchableOpacity 
         style={styles.backdrop} 
         activeOpacity={1} 
         onPress={handleBackdropPress}
       >
-        <BlurView intensity={30} tint="dark" style={StyleSheet.absoluteFill} />
+        <BlurView 
+          intensity={Platform.OS === 'ios' ? 25 : 20} 
+          tint="dark" 
+          style={StyleSheet.absoluteFill} 
+        />
       </TouchableOpacity>
 
-      {/* Modal Content */}
+      {/* Modal Content - iPhone Style */}
       <Animated.View 
         style={[
           styles.modalContainer,
           { transform: [{ translateY: slideAnim }] }
         ]}
       >
-        <BlurView intensity={BlurIntensity.heavy} tint="systemUltraThinMaterialLight" style={styles.modalBlur}>
-          {/* Gradient highlight */}
+        <BlurView 
+          intensity={Platform.OS === 'ios' ? 95 : 90} 
+          tint="systemUltraThinMaterialLight" 
+          style={styles.modalBlur}
+        >
+          {/* Soft blue accent highlight */}
           <LinearGradient
-            colors={['rgba(255, 255, 255, 0.3)', 'rgba(255, 255, 255, 0.1)']}
+            colors={[
+              'rgba(224, 242, 254, 0.95)', // Soft blue from login theme
+              'rgba(186, 230, 253, 0.90)',
+              'rgba(125, 211, 252, 0.85)'
+            ]}
             style={styles.modalHighlight}
           />
 
-          {/* Handle indicator */}
+          {/* Handle indicator - more subtle */}
           <View style={styles.handleContainer}>
             <View style={styles.handle} />
           </View>
 
-          {/* Header */}
+          {/* Header - cleaner */}
           <View style={styles.header}>
             <Text style={styles.title}>Select Family</Text>
             <TouchableOpacity 
-              onPress={onClose}
               style={styles.closeButton}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              onPress={onClose}
+              activeOpacity={0.7}
             >
-              <BlurView intensity={40} tint="light" style={styles.closeButtonBlur}>
-                <Ionicons name="close" size={20} color={Colors.text.dark} />
+              <BlurView 
+                intensity={Platform.OS === 'ios' ? 85 : 80} 
+                tint="light" 
+                style={styles.closeButtonBlur}
+              >
+                <Ionicons 
+                  name="close" 
+                  size={Platform.OS === 'android' ? 18 : 20} 
+                  color="rgba(28, 28, 30, 0.8)" 
+                />
               </BlurView>
             </TouchableOpacity>
           </View>
 
-          {/* Family List */}
+          {/* Family List - much cleaner items */}
           <ScrollView 
             style={styles.familyList}
-            showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.familyListContent}
+            showsVerticalScrollIndicator={false}
           >
-            {families.map((family) => {
-              const isSelected = selectedFamily?.family_id === family.family_id;
+            {families.map((family, index) => {
+              const isSelected = family.family_id === selectedFamily?.family_id;
               
               return (
                 <TouchableOpacity
                   key={family.family_id}
                   style={styles.familyItem}
                   onPress={() => handleFamilySelect(family)}
-                  activeOpacity={1}
+                  activeOpacity={0.8}
                 >
                   <BlurView 
-                    intensity={isSelected ? 60 : 30} 
-                    tint="light" 
+                    intensity={Platform.OS === 'ios' ? 90 : 85} 
+                    tint="systemUltraThinMaterialLight" 
                     style={[
                       styles.familyItemBlur,
                       isSelected && styles.selectedFamilyBlur
                     ]}
                   >
+                    {/* Soft blue selection gradient */}
                     {isSelected && (
                       <LinearGradient
-                        colors={[`${Colors.primary}30`, `${Colors.primary}10`]}
+                        colors={[
+                          'rgba(125, 211, 252, 0.12)', // Soft blue accent
+                          'rgba(186, 230, 253, 0.08)',
+                          'rgba(224, 242, 254, 0.06)'
+                        ]}
                         style={styles.selectedGradient}
                       />
                     )}
                     
                     <View style={styles.familyContent}>
+                      {/* Family Icon - cleaner */}
                       <View style={[
                         styles.familyIcon,
                         isSelected && styles.selectedFamilyIcon
                       ]}>
                         <Ionicons 
                           name="people" 
-                          size={24} 
-                          color={isSelected ? Colors.primary : Colors.text.secondary} 
+                          size={Platform.OS === 'android' ? 22 : 24} 
+                          color={isSelected ? Colors.primary : 'rgba(142, 142, 147, 0.8)'} 
                         />
                       </View>
                       
+                      {/* Family Info */}
                       <View style={styles.familyInfo}>
                         <Text style={[
                           styles.familyName,
@@ -164,9 +196,20 @@ const FamilySelector = ({ visible, onClose }) => {
                         </Text>
                       </View>
                       
+                      {/* Check Icon - more subtle */}
                       {isSelected && (
                         <View style={styles.checkIcon}>
-                          <Ionicons name="checkmark-circle" size={24} color={Colors.primary} />
+                          <BlurView 
+                            intensity={Platform.OS === 'ios' ? 85 : 80} 
+                            tint="light" 
+                            style={styles.checkIconBlur}
+                          >
+                            <Ionicons 
+                              name="checkmark" 
+                              size={Platform.OS === 'android' ? 16 : 18} 
+                              color="#7dd3fc" // Soft blue checkmark
+                            />
+                          </BlurView>
                         </View>
                       )}
                     </View>
@@ -176,10 +219,16 @@ const FamilySelector = ({ visible, onClose }) => {
             })}
           </ScrollView>
 
-          {/* Empty State */}
+          {/* Empty State - cleaner */}
           {families.length === 0 && (
             <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={48} color={Colors.text.secondary} />
+              <View style={styles.emptyIconContainer}>
+                <Ionicons 
+                  name="people-outline" 
+                  size={Platform.OS === 'android' ? 40 : 48} 
+                  color="rgba(142, 142, 147, 0.6)" 
+                />
+              </View>
               <Text style={styles.emptyTitle}>No Families Yet</Text>
               <Text style={styles.emptySubtitle}>Create or join a family to get started</Text>
             </View>
@@ -202,18 +251,19 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     maxHeight: screenHeight * 0.7,
-    borderTopLeftRadius: BorderRadius['2xl'],
-    borderTopRightRadius: BorderRadius['2xl'],
+    borderTopLeftRadius: Platform.OS === 'android' ? 20 : 24,
+    borderTopRightRadius: Platform.OS === 'android' ? 20 : 24,
     overflow: 'hidden',
   },
   
   modalBlur: {
     flex: 1,
-    borderTopLeftRadius: BorderRadius['2xl'],
-    borderTopRightRadius: BorderRadius['2xl'],
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderTopLeftRadius: Platform.OS === 'android' ? 20 : 24,
+    borderTopRightRadius: Platform.OS === 'android' ? 20 : 24,
+    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     borderBottomWidth: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   
   modalHighlight: {
@@ -221,54 +271,54 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: '30%',
-    borderTopLeftRadius: BorderRadius['2xl'],
-    borderTopRightRadius: BorderRadius['2xl'],
+    height: '100%',
+    borderTopLeftRadius: Platform.OS === 'android' ? 20 : 24,
+    borderTopRightRadius: Platform.OS === 'android' ? 20 : 24,
   },
   
   handleContainer: {
     alignItems: 'center',
-    paddingTop: Spacing.md,
-    paddingBottom: Spacing.sm,
+    paddingTop: Platform.OS === 'android' ? 10 : 12,
+    paddingBottom: Platform.OS === 'android' ? 8 : 10,
   },
   
   handle: {
-    width: 40,
-    height: 4,
-    backgroundColor: Colors.text.placeholder,
-    borderRadius: 2,
-    opacity: 0.6,
+    width: Platform.OS === 'android' ? 36 : 40,
+    height: Platform.OS === 'android' ? 3 : 4,
+    backgroundColor: 'rgba(142, 142, 147, 0.4)',
+    borderRadius: Platform.OS === 'android' ? 1.5 : 2,
   },
   
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing.lg,
+    paddingHorizontal: Platform.OS === 'android' ? 20 : 24,
+    paddingBottom: Platform.OS === 'android' ? 16 : 20,
   },
   
   title: {
-    fontSize: Typography.sizes.xl,
-    fontFamily: Typography.fonts.display,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.text.dark,
-    letterSpacing: -0.3,
+    fontSize: Platform.OS === 'android' ? 18 : 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+    fontWeight: '600',
+    color: '#1C1C1E',
+    letterSpacing: Platform.OS === 'android' ? 0.2 : -0.3,
   },
   
   closeButton: {
-    borderRadius: BorderRadius.full,
+    borderRadius: Platform.OS === 'android' ? 14 : 16,
     overflow: 'hidden',
   },
   
   closeButtonBlur: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: Platform.OS === 'android' ? 28 : 32,
+    height: Platform.OS === 'android' ? 28 : 32,
+    borderRadius: Platform.OS === 'android' ? 14 : 16,
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   
   familyList: {
@@ -276,23 +326,24 @@ const styles = StyleSheet.create({
   },
   
   familyListContent: {
-    paddingHorizontal: Spacing.xl,
-    paddingBottom: Spacing['4xl'],
+    paddingHorizontal: Platform.OS === 'android' ? 20 : 24,
+    paddingBottom: Platform.OS === 'android' ? 32 : 40,
   },
   
   familyItem: {
-    marginBottom: Spacing.md,
+    marginBottom: Platform.OS === 'android' ? 10 : 12,
   },
   
   familyItemBlur: {
-    borderRadius: BorderRadius.xl,
+    borderRadius: Platform.OS === 'android' ? 16 : 20,
     overflow: 'hidden',
-    borderWidth: 0.5,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   
   selectedFamilyBlur: {
-    borderColor: `${Colors.primary}40`,
+    borderColor: 'rgba(125, 211, 252, 0.4)', // Soft blue border
   },
   
   selectedGradient: {
@@ -301,28 +352,29 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+    borderRadius: Platform.OS === 'android' ? 16 : 20,
   },
   
   familyContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: Spacing.lg,
+    padding: Platform.OS === 'android' ? 16 : 20,
     position: 'relative',
     zIndex: 1,
   },
   
   familyIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(142, 142, 147, 0.1)',
+    width: Platform.OS === 'android' ? 44 : 48,
+    height: Platform.OS === 'android' ? 44 : 48,
+    borderRadius: Platform.OS === 'android' ? 22 : 24,
+    backgroundColor: 'rgba(142, 142, 147, 0.08)',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: Spacing.md,
+    marginRight: Platform.OS === 'android' ? 12 : 16,
   },
   
   selectedFamilyIcon: {
-    backgroundColor: `${Colors.primary}20`,
+    backgroundColor: 'rgba(125, 211, 252, 0.15)', // Soft blue background
   },
   
   familyInfo: {
@@ -330,55 +382,75 @@ const styles = StyleSheet.create({
   },
   
   familyName: {
-    fontSize: Typography.sizes.lg,
-    fontFamily: Typography.fonts.text,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.text.dark,
-    letterSpacing: -0.2,
-    marginBottom: Spacing.xs,
+    fontSize: Platform.OS === 'android' ? 16 : 17,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '600',
+    color: '#1C1C1E',
+    letterSpacing: Platform.OS === 'android' ? 0.1 : -0.2,
+    marginBottom: Platform.OS === 'android' ? 3 : 4,
   },
   
   selectedFamilyName: {
-    color: Colors.primary,
+    color: '#7dd3fc', // Soft blue text color
   },
   
   familyMembers: {
-    fontSize: Typography.sizes.sm,
-    fontFamily: Typography.fonts.text,
-    fontWeight: Typography.weights.medium,
-    color: Colors.text.secondary,
-    letterSpacing: -0.1,
+    fontSize: Platform.OS === 'android' ? 13 : 14,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '500',
+    color: 'rgba(28, 28, 30, 0.6)',
+    letterSpacing: Platform.OS === 'android' ? 0.1 : -0.1,
   },
   
   checkIcon: {
-    marginLeft: Spacing.md,
+    marginLeft: Platform.OS === 'android' ? 12 : 16,
+  },
+  
+  checkIconBlur: {
+    width: Platform.OS === 'android' ? 24 : 28,
+    height: Platform.OS === 'android' ? 24 : 28,
+    borderRadius: Platform.OS === 'android' ? 12 : 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderColor: 'rgba(125, 211, 252, 0.4)', // Soft blue border
+    backgroundColor: 'rgba(125, 211, 252, 0.08)', // Soft blue background
   },
   
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: Spacing['4xl'],
-    paddingHorizontal: Spacing.xl,
+    paddingVertical: Platform.OS === 'android' ? 40 : 48,
+    paddingHorizontal: Platform.OS === 'android' ? 20 : 24,
+  },
+  
+  emptyIconContainer: {
+    width: Platform.OS === 'android' ? 64 : 72,
+    height: Platform.OS === 'android' ? 64 : 72,
+    borderRadius: Platform.OS === 'android' ? 32 : 36,
+    backgroundColor: 'rgba(142, 142, 147, 0.06)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Platform.OS === 'android' ? 16 : 20,
   },
   
   emptyTitle: {
-    fontSize: Typography.sizes.xl,
-    fontFamily: Typography.fonts.display,
-    fontWeight: Typography.weights.semibold,
-    color: Colors.text.dark,
-    marginTop: Spacing.lg,
+    fontSize: Platform.OS === 'android' ? 18 : 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
+    fontWeight: '600',
+    color: '#1C1C1E',
+    marginBottom: Platform.OS === 'android' ? 8 : 12,
     textAlign: 'center',
   },
   
   emptySubtitle: {
-    fontSize: Typography.sizes.base,
-    fontFamily: Typography.fonts.text,
-    fontWeight: Typography.weights.normal,
-    color: Colors.text.secondary,
-    marginTop: Spacing.sm,
+    fontSize: Platform.OS === 'android' ? 14 : 16,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '400',
+    color: 'rgba(28, 28, 30, 0.6)',
     textAlign: 'center',
-    lineHeight: Typography.sizes.base * 1.4,
+    lineHeight: Platform.OS === 'android' ? 20 : 22,
   },
 });
 

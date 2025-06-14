@@ -26,11 +26,17 @@ const ITEM_HEIGHT = ITEM_LAYOUT_HEIGHT;
 
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList);
 
-// Clean Header Component (no notification bell)
+// Ultra-Clean Header Component - iPhone Style
 const CleanFamilyHeader = ({ selectedFamily, onFamilySelectorPress, scrollY, topInset }) => {
   const headerOpacity = scrollY.interpolate({
     inputRange: [0, 50],
     outputRange: [1, 0.98],
+    extrapolate: 'clamp',
+  });
+
+  const headerTransform = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, -2],
     extrapolate: 'clamp',
   });
 
@@ -39,26 +45,38 @@ const CleanFamilyHeader = ({ selectedFamily, onFamilySelectorPress, scrollY, top
       style={[
         styles.headerContainer,
         {
-          paddingTop: topInset + 12,
+          paddingTop: topInset + (Platform.OS === 'android' ? 8 : 12),
           opacity: headerOpacity,
+          transform: [{ translateY: headerTransform }],
         }
       ]}
     >
-      <BlurView intensity={85} tint="light" style={styles.headerBlur}>
+      {/* Subtle background blur - much lighter than before */}
+      <BlurView intensity={Platform.OS === 'ios' ? 95 : 80} tint="systemUltraThinMaterialLight" style={styles.headerBlur}>
+        {/* Soft blue accent highlight */}
         <LinearGradient
-          colors={['rgba(255, 255, 255, 0.8)', 'rgba(255, 255, 255, 0.4)']}
+          colors={[
+            'rgba(224, 242, 254, 0.95)', // Soft blue from login (e0f2fe)
+            'rgba(186, 230, 253, 0.90)', // Medium blue from login (bae6fd) 
+            'rgba(125, 211, 252, 0.85)'  // Brighter blue from login (7dd3fc)
+          ]}
           style={styles.headerHighlight}
         />
+        
         <TouchableOpacity 
           style={styles.familySelector}
           onPress={onFamilySelectorPress}
-          activeOpacity={0.7}
+          activeOpacity={0.8}
         >
-          <Text style={styles.familyName} numberOfLines={1}>
-            {selectedFamily?.name || 'Select Family'}
+          <Text style={styles.familyName}>
+            {selectedFamily?.family_name || 'Select Family'}
           </Text>
           <View style={styles.chevronContainer}>
-            <Ionicons name="chevron-down" size={18} color="#1C1C1E" />
+            <Ionicons 
+              name="chevron-down" 
+              size={16} 
+              color="rgba(28, 28, 30, 0.8)" 
+            />
           </View>
         </TouchableOpacity>
       </BlurView>
@@ -66,21 +84,25 @@ const CleanFamilyHeader = ({ selectedFamily, onFamilySelectorPress, scrollY, top
   );
 };
 
-// Clean Empty State
+// Clean Empty State Component
 const CleanEmptyState = () => (
   <View style={styles.emptyStateContainer}>
-    <BlurView intensity={80} tint="light" style={styles.emptyCard}>
+    <BlurView intensity={Platform.OS === 'ios' ? 95 : 85} tint="systemUltraThinMaterialLight" style={styles.emptyCard}>
       <LinearGradient
-        colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0.2)']}
+        colors={[
+          'rgba(255, 255, 255, 0.9)', 
+          'rgba(255, 255, 255, 0.8)',
+          'rgba(255, 255, 255, 0.6)'
+        ]}
         style={styles.emptyCardHighlight}
       />
       <View style={styles.emptyContent}>
         <View style={styles.emptyIconContainer}>
-          <Ionicons name="people-outline" size={48} color="#007AFF" />
+          <Ionicons name="heart-outline" size={32} color="#7dd3fc" />
         </View>
-        <Text style={styles.emptyTitle}>Welcome to your Family Feed</Text>
+        <Text style={styles.emptyTitle}>No Family Moments Yet</Text>
         <Text style={styles.emptySubtitle}>
-          Share moments and memories with your loved ones
+          Be the first to share a special moment with your family!
         </Text>
       </View>
     </BlurView>
@@ -88,23 +110,24 @@ const CleanEmptyState = () => (
 );
 
 export default function FeedScreen() {
-  const { 
-    posts, 
-    loading, 
-    loadingMore, 
-    error, 
-    handleRefresh, 
-    handleLoadMore, 
-    handleToggleLike, 
-    selectedFamily, 
-    hasMore 
-  } = useFeedManager();
-  
+  const topInset = useSafeAreaInsets().top;
   const scrollY = useRef(new Animated.Value(0)).current;
   const [showFamilySelector, setShowFamilySelector] = useState(false);
-  const flatListRef = useRef(null);
-  const insets = useSafeAreaInsets();
+  
+  const {
+    posts,
+    selectedFamily,
+    loading,
+    refreshing,
+    loadingMore,
+    error,
+    loadNextPage,
+    refetch,
+    toggleLike,
+    updatePost,
+  } = useFeedManager();
 
+  // Handle family selector press
   const handleFamilySelectorPress = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setShowFamilySelector(true);
@@ -114,114 +137,96 @@ export default function FeedScreen() {
     setShowFamilySelector(false);
   };
 
+  // Handle scroll events for header animation
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-    { useNativeDriver: true }
+    { useNativeDriver: false }
   );
 
-  // Fixed handleLike function that properly updates the post in the list
-  const handleLike = useCallback(async (postId) => {
-    try {
-      // Add haptic feedback immediately for responsiveness
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      
-      // Call the hook's handleToggleLike function
-      await handleToggleLike(postId);
-      
-      // Success haptic
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    } catch (error) {
-      console.error('Error toggling like:', error);
-      // Error haptic
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-    }
-  }, [handleToggleLike]);
-
-  // Handle post updates (like comment count changes)
-  const handlePostUpdate = useCallback((postId) => {
-    // This could trigger a refresh or update specific post
-    // For now, we'll rely on the comment modal updating the local state
-    console.log('Post updated:', postId);
-  }, []);
-
-  const renderItem = useCallback(({ item, index }) => (
+  // Render individual post item
+  const renderPost = useCallback(({ item }) => (
     <View style={styles.postContainer}>
       <PostCard 
         post={item} 
-        onToggleLike={handleLike}
-        onPostUpdate={() => handlePostUpdate(item.post_id || item.id)}
+        onToggleLike={toggleLike}
+        onPostUpdate={updatePost}
       />
     </View>
-  ), [handleLike, handlePostUpdate]);
+  ), [toggleLike, updatePost]);
 
+  // Footer loader component
   const renderFooter = () => {
     if (!loadingMore) return null;
     return (
       <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#007AFF" />
-        <Text style={styles.loadingMoreText}>Loading more posts...</Text>
+        <ActivityIndicator size="small" color="#7dd3fc" />
+        <Text style={styles.loadingMoreText}>Loading more...</Text>
       </View>
     );
   };
 
-  if (loading) {
+  // Loading state
+  if (loading && posts.length === 0) {
     return (
-      <View style={styles.container}>
-        <StatusBar style="dark" />
-        <View style={styles.loadingContainer}>
-          <BlurView intensity={85} tint="light" style={styles.loadingCard}>
-            <LinearGradient
-              colors={['rgba(255, 255, 255, 0.6)', 'rgba(255, 255, 255, 0.2)']}
-              style={styles.loadingHighlight}
-            />
-            <ActivityIndicator size="large" color="#007AFF" />
-            <Text style={styles.loadingText}>Loading your family feed...</Text>
-          </BlurView>
-        </View>
+      <View style={styles.loadingContainer}>
+        <BlurView intensity={Platform.OS === 'ios' ? 95 : 85} tint="systemUltraThinMaterialLight" style={styles.loadingCard}>
+        {/* Soft blue accent highlight */}
+        <LinearGradient
+          colors={[
+            'rgba(224, 242, 254, 0.95)', 
+            'rgba(186, 230, 253, 0.85)',
+            'rgba(125, 211, 252, 0.75)'
+          ]}
+          style={styles.loadingHighlight}
+        />
+        <ActivityIndicator size="large" color="#7dd3fc" />
+        <Text style={styles.loadingText}>Loading your family moments...</Text>
+        </BlurView>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
-      <StatusBar style="dark" />
+      <StatusBar style="dark" backgroundColor="transparent" translucent />
       
-      {/* Clean Background */}
+      {/* Soft blue background gradient - matching login/register theme */}
       <LinearGradient
         colors={[
-          '#F8FAFF',
-          '#F0F7FF',
-          '#E8F4FF',
+          '#f0f9ff', // Very light blue
+          '#e0f2fe', // Light sky blue (from login)
+          '#f8faff'  // Almost white with blue tint
         ]}
         style={styles.backgroundGradient}
       />
 
-      <CleanFamilyHeader 
+      {/* Header */}
+      <CleanFamilyHeader
         selectedFamily={selectedFamily}
         onFamilySelectorPress={handleFamilySelectorPress}
         scrollY={scrollY}
-        topInset={insets.top}
+        topInset={topInset}
       />
 
+      {/* Posts List */}
       <AnimatedFlatList
-        ref={flatListRef}
         data={posts}
-        renderItem={renderItem}
-        keyExtractor={(item) => (item.post_id || item.id)?.toString()}
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
+        renderItem={renderPost}
+        keyExtractor={(item) => item.post_id || item.id}
         contentContainerStyle={[
           styles.listContainer,
           { 
-            paddingTop: insets.top + 85, // Account for header
-            paddingBottom: 140, // Account for floating button
+            paddingTop: topInset + (Platform.OS === 'android' ? 85 : 95),
+            paddingBottom: 120
           }
         ]}
-        onRefresh={handleRefresh}
-        refreshing={loading}
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.1}
+        showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
+        onRefresh={refetch}
+        refreshing={refreshing}
+        onEndReached={loadNextPage}
+        onEndReachedThreshold={0.3}
         ListFooterComponent={renderFooter}
         ListEmptyComponent={!loading ? <CleanEmptyState /> : null}
         getItemLayout={(data, index) => ({
@@ -229,7 +234,7 @@ export default function FeedScreen() {
           offset: ITEM_HEIGHT * index,
           index,
         })}
-        removeClippedSubviews={false} // Helps with rendering issues
+        removeClippedSubviews={false}
         maxToRenderPerBatch={5}
         windowSize={10}
       />
@@ -247,7 +252,7 @@ export default function FeedScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFF',
+    backgroundColor: '#f0f9ff', // Soft blue background
   },
   backgroundGradient: {
     position: 'absolute',
@@ -257,93 +262,98 @@ const styles = StyleSheet.create({
     bottom: 0,
   },
   
-  // Header Styles
+  // Header Styles - Ultra Clean
   headerContainer: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 16,
+    paddingHorizontal: Platform.OS === 'android' ? 20 : 16,
     paddingBottom: 8,
     zIndex: 100,
   },
   headerBlur: {
-    borderRadius: 24,
+    borderRadius: Platform.OS === 'android' ? 16 : 20,
     overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
+    shadowOffset: { width: 0, height: Platform.OS === 'android' ? 2 : 4 },
+    shadowOpacity: Platform.OS === 'android' ? 0.04 : 0.06,
+    shadowRadius: Platform.OS === 'android' ? 8 : 12,
+    elevation: Platform.OS === 'android' ? 2 : 4,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   headerHighlight: {
     position: 'absolute',
-    top: 1,
-    left: 1,
-    right: 1,
-    height: '50%',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+    borderRadius: Platform.OS === 'android' ? 16 : 20,
   },
   familySelector: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    minHeight: 56,
+    paddingHorizontal: Platform.OS === 'android' ? 16 : 20,
+    paddingVertical: Platform.OS === 'android' ? 12 : 16,
+    minHeight: Platform.OS === 'android' ? 48 : 56,
   },
   familyName: {
-    fontSize: 18,
+    fontSize: Platform.OS === 'android' ? 16 : 18,
     fontWeight: '600',
     color: '#1C1C1E',
-    marginRight: 8,
+    marginRight: 6,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
     textAlign: 'center',
+    letterSpacing: Platform.OS === 'android' ? 0.2 : 0,
   },
   chevronContainer: {
     padding: 2,
+    opacity: 0.8,
   },
 
-  // List Styles
+  // List Styles - More spacing for Android
   listContainer: {
     paddingHorizontal: 0,
   },
   postContainer: {
-    marginBottom: 24,
+    marginBottom: Platform.OS === 'android' ? 28 : 24,
     alignItems: 'center',
     backgroundColor: 'transparent',
   },
 
-  // Loading States
+  // Loading States - Lighter
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFF',
+    backgroundColor: '#f0f9ff', // Soft blue background
     paddingHorizontal: 20,
   },
   loadingCard: {
-    paddingVertical: 32,
-    paddingHorizontal: 28,
-    borderRadius: 24,
+    paddingVertical: Platform.OS === 'android' ? 28 : 32,
+    paddingHorizontal: Platform.OS === 'android' ? 24 : 28,
+    borderRadius: Platform.OS === 'android' ? 20 : 24,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: Platform.OS === 'android' ? 4 : 8 },
+    shadowOpacity: Platform.OS === 'android' ? 0.04 : 0.06,
+    shadowRadius: Platform.OS === 'android' ? 12 : 16,
+    elevation: Platform.OS === 'android' ? 4 : 8,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    overflow: 'hidden',
   },
   loadingHighlight: {
     position: 'absolute',
-    top: 1,
-    left: 1,
-    right: 1,
-    height: '40%',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+    borderRadius: Platform.OS === 'android' ? 20 : 24,
   },
   loadingText: {
     marginTop: 16,
@@ -362,12 +372,12 @@ const styles = StyleSheet.create({
   loadingMoreText: {
     marginLeft: 8,
     fontSize: 14,
-    color: '#007AFF',
+    color: '#7dd3fc', // Soft blue accent
     fontWeight: '500',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
 
-  // Empty State Styles
+  // Empty State Styles - Lighter
   emptyStateContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -378,41 +388,42 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     width: screenWidth * 0.85,
-    paddingVertical: 48,
-    paddingHorizontal: 32,
-    borderRadius: 32,
+    paddingVertical: Platform.OS === 'android' ? 40 : 48,
+    paddingHorizontal: Platform.OS === 'android' ? 28 : 32,
+    borderRadius: Platform.OS === 'android' ? 24 : 32,
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.6)',
+    borderWidth: Platform.OS === 'android' ? 0.5 : 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
     overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowOffset: { width: 0, height: Platform.OS === 'android' ? 4 : 8 },
+    shadowOpacity: Platform.OS === 'android' ? 0.04 : 0.06,
+    shadowRadius: Platform.OS === 'android' ? 12 : 16,
+    elevation: Platform.OS === 'android' ? 4 : 8,
     backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   emptyCardHighlight: {
     position: 'absolute',
-    top: 1,
-    left: 1,
-    right: 1,
-    height: '40%',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '100%',
+    borderRadius: Platform.OS === 'android' ? 24 : 32,
   },
   emptyContent: {
     alignItems: 'center',
   },
   emptyIconContainer: {
     marginBottom: 24,
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(0, 122, 255, 0.1)',
+    width: Platform.OS === 'android' ? 72 : 80,
+    height: Platform.OS === 'android' ? 72 : 80,
+    borderRadius: Platform.OS === 'android' ? 36 : 40,
+    backgroundColor: 'rgba(125, 211, 252, 0.12)', // Soft blue accent
     justifyContent: 'center',
     alignItems: 'center',
   },
   emptyTitle: {
-    fontSize: 22,
+    fontSize: Platform.OS === 'android' ? 20 : 22,
     fontWeight: '600',
     color: '#1C1C1E',
     textAlign: 'center',
