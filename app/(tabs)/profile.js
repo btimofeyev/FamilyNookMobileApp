@@ -26,6 +26,8 @@ import * as Haptics from "expo-haptics";
 import * as Clipboard from "expo-clipboard";
 import * as SecureStore from "expo-secure-store";
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   getUserProfile,
   inviteToFamily,
@@ -521,7 +523,7 @@ export default function ProfileScreen() {
       onRequestClose={() => setShowInviteModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <BlurView intensity={60} tint="dark" style={styles.modalBlur}>
+        <BlurView intensity={25} tint="dark" style={styles.modalBlur}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Invite Family Member</Text>
@@ -584,7 +586,7 @@ export default function ProfileScreen() {
       onRequestClose={() => setShowJoinFamilyModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <BlurView intensity={60} tint="dark" style={styles.modalBlur}>
+        <BlurView intensity={25} tint="dark" style={styles.modalBlur}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Join a Family</Text>
@@ -636,7 +638,7 @@ export default function ProfileScreen() {
       onRequestClose={() => setShowPasskeyModal(false)}
     >
       <View style={styles.modalOverlay}>
-        <BlurView intensity={60} tint="dark" style={styles.modalBlur}>
+        <BlurView intensity={25} tint="dark" style={styles.modalBlur}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Family Passkey</Text>
@@ -672,55 +674,94 @@ export default function ProfileScreen() {
     </Modal>
   );
 
+  const topInset = useSafeAreaInsets().top;
+
   if (loading && !userProfile) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#F0C142" />
-        <Text style={styles.loadingText}>Loading profile...</Text>
+        <StatusBar style="dark" />
+        <LinearGradient
+          colors={['#f0f9ff', '#e0f2fe', '#f8faff']}
+          style={styles.backgroundGradient}
+        />
+        <BlurView intensity={90} tint="systemUltraThinMaterialLight" style={styles.loadingCard}>
+          <LinearGradient
+            colors={[
+              'rgba(255, 255, 255, 0.9)', 
+              'rgba(255, 255, 255, 0.6)'
+            ]}
+            style={styles.loadingHighlight}
+          />
+          <ActivityIndicator size="large" color="#7dd3fc" />
+          <Text style={styles.loadingText}>Loading your profile...</Text>
+        </BlurView>
       </View>
     );
   }
 
   return (
     <>
+      <StatusBar style="dark" />
       {/* Add Stack.Screen with settings icon in the header */}
       <Stack.Screen
         options={{
           headerRight: () => (
             <TouchableOpacity
               onPress={() => router.push("/settings")}
-              style={{ padding: 8 }}
+              style={styles.headerButton}
             >
-              <Ionicons name="settings-outline" size={24} color="#F5F5F7" />
+              <BlurView intensity={80} tint="light" style={styles.headerButtonBlur}>
+                <Ionicons name="settings-outline" size={20} color="#1C1C1E" />
+              </BlurView>
             </TouchableOpacity>
           ),
           title: "Profile",
           headerStyle: {
-            backgroundColor: "#1E2B2F",
+            backgroundColor: "transparent",
           },
-          headerTintColor: "#F5F5F7",
+          headerTintColor: "#1C1C1E",
           headerShadowVisible: false,
-          headerShown: true, // Make sure the header is shown
+          headerShown: true,
+          headerTransparent: true,
         }}
+      />
+      
+      {/* Liquid Glass Background */}
+      <LinearGradient
+        colors={['#f0f9ff', '#e0f2fe', '#f8faff']}
+        style={styles.backgroundGradient}
       />
 
       <ScrollView
         style={styles.container}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingTop: topInset + 60 }
+        ]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            tintColor="#F0C142"
+            tintColor="#7dd3fc"
+            progressViewOffset={topInset + 60}
           />
         }
+        showsVerticalScrollIndicator={false}
       >
-        <View style={styles.header}>
+        <BlurView intensity={90} tint="systemUltraThinMaterialLight" style={styles.header}>
+          <LinearGradient
+            colors={[
+              'rgba(255, 255, 255, 0.8)', 
+              'rgba(255, 255, 255, 0.4)'
+            ]}
+            style={styles.headerHighlight}
+          />
           {renderProfileImage()}
           <Text style={styles.userName}>{user?.name || "User"}</Text>
           <Text style={styles.userEmail}>
             {user?.email || "user@example.com"}
           </Text>
-        </View>
+        </BlurView>
 
         {/* Family Members Section with Animated Carousel */}
         {selectedFamily && familyMembers.length > 0 && (
@@ -939,18 +980,48 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#121212",
+    backgroundColor: 'transparent',
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 120,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#121212",
+    padding: 20,
+  },
+  loadingCard: {
+    padding: 32,
+    borderRadius: 24,
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    minWidth: 200,
+  },
+  loadingHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 16,
-    color: "#AEAEB2",
+    color: '#1C1C1E',
+    fontWeight: '500',
+    textAlign: 'center',
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
   errorText: {
@@ -960,12 +1031,36 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
+  headerButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  headerButtonBlur: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+  },
   header: {
-    backgroundColor: "rgba(30, 30, 30, 0.7)",
     alignItems: "center",
-    padding: 20,
-    paddingTop: 60,
-    paddingBottom: 30,
+    padding: 24,
+    marginBottom: 20,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  headerHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   profileImageContainer: {
     position: "relative",
@@ -975,49 +1070,61 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 60,
-    borderWidth: 3,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-    backgroundColor: "#2C2C2E",
+    borderWidth: 4,
+    borderColor: "rgba(255, 255, 255, 0.8)",
+    backgroundColor: "rgba(125, 211, 252, 0.1)",
+    shadowColor: "rgba(0, 0, 0, 0.1)",
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 8,
   },
   editImageButton: {
     position: "absolute",
     right: 0,
     bottom: 6,
-    backgroundColor: "#F0C142", // Golden yellow from the logo
+    backgroundColor: "#7dd3fc",
     width: 36,
     height: 36,
     borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 2,
-    borderColor: "#121212",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 5,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    shadowColor: "rgba(0, 0, 0, 0.1)",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 8,
   },
   userName: {
-    fontSize: 24,
-    fontWeight: "600",
-    color: "#FFFFFF",
-    marginBottom: 5,
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#1C1C1E",
+    marginBottom: 8,
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
   },
   userEmail: {
     fontSize: 16,
-    color: "#AEAEB2",
+    color: 'rgba(28, 28, 30, 0.6)',
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
+    fontWeight: '500',
   },
 
   // Family Members Carousel Style
   familyMembersSection: {
-    backgroundColor: "rgba(18, 18, 18, 0.9)",
-    marginBottom: 16,
-    borderRadius: 12,
-    margin: 16,
+    marginBottom: 20,
+    borderRadius: 24,
     overflow: "hidden",
-    padding: 14,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 8,
   },
   familyMembersCarouselContainer: {
     height: 120, // Fixed height for the carousel
@@ -1045,19 +1152,25 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
   },
   inviteButtonText: {
-    color: "#00C2FF", // Cyan - matches app theme
+    color: "#7dd3fc",
     fontWeight: "600",
     fontSize: 15,
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
 
   section: {
-    backgroundColor: "rgba(18, 18, 18, 0.9)",
-    marginBottom: 16,
-    borderRadius: 12,
-    margin: 16,
+    marginBottom: 20,
+    borderRadius: 24,
     overflow: "hidden",
-    padding: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 8,
   },
   sectionTitleRow: {
     flexDirection: "row",
@@ -1068,11 +1181,12 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 20,
     fontWeight: "600",
-    color: "#FFFFFF",
+    color: "#1C1C1E",
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
+    letterSpacing: -0.3,
   },
   addButtonText: {
-    color: "#5DADE2", // Light Blue
+    color: "#7dd3fc",
     fontWeight: "600",
     fontSize: 15,
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
@@ -1086,66 +1200,79 @@ const styles = StyleSheet.create({
   familyCard: {
     width: 120,
     height: 110,
-    backgroundColor: "rgba(44, 44, 46, 0.6)",
-    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    borderRadius: 20,
     marginRight: 12,
     padding: 15,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(84, 84, 88, 0.5)",
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   selectedFamilyCard: {
     borderWidth: 2,
-    borderColor: "#F0C142", // Golden yellow from the logo
-    backgroundColor: "rgba(44, 44, 46, 0.9)",
+    borderColor: "#7dd3fc",
+    backgroundColor: 'rgba(125, 211, 252, 0.2)',
   },
   familyIconContainer: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#F0C142", // Golden yellow from the logo
+    backgroundColor: "#7dd3fc",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 10,
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   familyCardName: {
     fontSize: 14,
-    fontWeight: "500",
+    fontWeight: "600",
     textAlign: "center",
-    color: "#FFFFFF",
+    color: "#1C1C1E",
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
   emptyFamily: {
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "rgba(44, 44, 46, 0.6)",
-    borderRadius: 16,
+    backgroundColor: 'rgba(240, 247, 255, 0.6)',
+    borderRadius: 20,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   emptyFamilyText: {
     fontSize: 16,
-    color: "#AEAEB2",
+    color: 'rgba(28, 28, 30, 0.6)',
     marginTop: 12,
     marginBottom: 20,
     textAlign: "center",
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
+    fontWeight: '500',
   },
   createFamilyButton: {
-    backgroundColor: "#F0C142", // Golden yellow from the logo
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-    borderRadius: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: "#7dd3fc",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 28,
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   createFamilyButtonText: {
-    color: "#000000",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontSize: 16,
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
@@ -1163,54 +1290,62 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "#4CC2C4", // Teal color from the logo
+    backgroundColor: "#7dd3fc",
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 10,
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   disabledIconCircle: {
-    backgroundColor: "#3A3A3C",
+    backgroundColor: 'rgba(28, 28, 30, 0.3)',
   },
   managementButtonText: {
     fontSize: 14,
-    fontWeight: "500",
-    color: "#FFFFFF",
+    fontWeight: "600",
+    color: "#1C1C1E",
     textAlign: "center",
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
   disabledText: {
-    color: "#636366",
+    color: 'rgba(28, 28, 30, 0.4)',
   },
   emptyPosts: {
     alignItems: "center",
     justifyContent: "center",
     padding: 24,
-    backgroundColor: "rgba(44, 44, 46, 0.6)",
-    borderRadius: 16,
+    backgroundColor: 'rgba(240, 247, 255, 0.6)',
+    borderRadius: 20,
     marginTop: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.4)',
   },
   emptyPostsText: {
     fontSize: 16,
-    color: "#AEAEB2",
+    color: 'rgba(28, 28, 30, 0.6)',
     marginTop: 12,
     marginBottom: 20,
     textAlign: "center",
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
+    fontWeight: '500',
   },
   createPostButton: {
-    backgroundColor: "#4CC2C4", // Teal color from the logo
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-    borderRadius: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: "#7dd3fc",
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    borderRadius: 28,
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   createPostButtonText: {
-    color: "#000000",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontSize: 16,
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
@@ -1222,7 +1357,7 @@ const styles = StyleSheet.create({
   },
   viewAllButtonText: {
     fontSize: 16,
-    color: "#4CC2C4", // Teal color from the logo
+    color: "#7dd3fc",
     fontWeight: "600",
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
@@ -1235,14 +1370,19 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
   },
   modalContent: {
-    backgroundColor: "rgba(30, 30, 30, 0.9)", // Dark background for the modal
+    backgroundColor: 'rgba(255, 255, 255, 0.95)',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingBottom: 40,
     maxHeight: "80%",
     borderWidth: 1,
-    borderColor: "rgba(84, 84, 88, 0.5)",
-    marginTop: "auto", // Push to bottom
+    borderColor: 'rgba(255, 255, 255, 0.8)',
+    marginTop: "auto",
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 16,
   },
   modalHeader: {
     flexDirection: "row",
@@ -1250,12 +1390,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(84, 84, 88, 0.5)",
+    borderBottomColor: 'rgba(255, 255, 255, 0.3)',
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: "600",
-    color: "#FFFFFF",
+    fontWeight: "700",
+    color: "#1C1C1E",
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
   },
   modalBody: {
@@ -1263,62 +1403,65 @@ const styles = StyleSheet.create({
   },
   modalLabel: {
     fontSize: 16,
-    color: "#FFFFFF",
+    color: "#1C1C1E",
     marginBottom: 16,
+    fontWeight: '500',
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
   modalInput: {
-    backgroundColor: "rgba(58, 58, 60, 0.8)",
-    borderRadius: 12,
+    backgroundColor: 'rgba(240, 247, 255, 0.8)',
+    borderRadius: 16,
     padding: 16,
     fontSize: 16,
     marginBottom: 24,
-    color: "#FFFFFF",
+    color: "#1C1C1E",
     borderWidth: 1,
-    borderColor: "rgba(84, 84, 88, 0.5)",
+    borderColor: 'rgba(255, 255, 255, 0.6)',
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
+    fontWeight: '500',
   },
   modalButton: {
-    backgroundColor: "#F0C142", // Golden yellow from the logo
-    paddingVertical: 14,
+    backgroundColor: "#7dd3fc",
+    paddingVertical: 16,
     paddingHorizontal: 24,
-    borderRadius: 22,
+    borderRadius: 28,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   modalButtonText: {
-    color: "#000000",
-    fontWeight: "600",
+    color: "#FFFFFF",
+    fontWeight: "700",
     fontSize: 16,
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
   },
   passkeyContainer: {
-    backgroundColor: "rgba(58, 58, 60, 0.8)",
+    backgroundColor: 'rgba(125, 211, 252, 0.15)',
     padding: 20,
-    borderRadius: 12,
+    borderRadius: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "rgba(84, 84, 88, 0.5)",
+    borderColor: 'rgba(125, 211, 252, 0.3)',
   },
   passkey: {
     fontSize: 20,
-    fontWeight: "600",
-    color: "#F0C142", // Golden yellow from the logo
+    fontWeight: "700",
+    color: "#1C1C1E",
     textAlign: "center",
     letterSpacing: 1,
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
   },
   passkeyInfo: {
     fontSize: 14,
-    color: "#AEAEB2",
+    color: 'rgba(28, 28, 30, 0.6)',
     marginBottom: 24,
     textAlign: "center",
     fontFamily: Platform.OS === "ios" ? "SF Pro Text" : "System",
+    fontWeight: '500',
   },
   profileImageLoadingOverlay: {
     position: "absolute",
@@ -1332,7 +1475,7 @@ const styles = StyleSheet.create({
   },
   profileInitial: {
     fontSize: 42,
-    fontWeight: "600",
+    fontWeight: "700",
     color: "#FFFFFF",
     fontFamily: Platform.OS === "ios" ? "SF Pro Display" : "System",
   },
@@ -1366,5 +1509,34 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
     borderRadius: 4,
+  },
+  errorText: {
+    color: '#FF3B30',
+    fontSize: 16,
+    textAlign: 'center',
+    marginBottom: 20,
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '500',
+  },
+  sectionHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  modalCloseButton: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  modalCloseBlur: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   }
 });

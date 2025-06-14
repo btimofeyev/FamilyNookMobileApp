@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -10,14 +10,106 @@ import {
   Platform,
   ScrollView,
   Alert,
-  SafeAreaView
+  SafeAreaView,
+  Animated,
+  Dimensions
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import axios from 'axios';
 import { API_URL } from '@env';
 
+const { width, height } = Dimensions.get('window');
+
 const API_ENDPOINT = API_URL || 'https://famlynook.com';
+
+// Liquid Glass Input Component
+const LiquidGlassInput = ({ label, icon, error, children, value, showStrengthBar = false, passwordStrength = 0 }) => {
+  const focusAnim = useRef(new Animated.Value(0)).current;
+  const [isFocused, setIsFocused] = useState(false);
+
+  const onFocus = () => {
+    setIsFocused(true);
+    Animated.timing(focusAnim, {
+      toValue: 1,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const onBlur = () => {
+    setIsFocused(false);
+    Animated.timing(focusAnim, {
+      toValue: 0,
+      duration: 200,
+      useNativeDriver: false,
+    }).start();
+  };
+
+  const borderColor = focusAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['rgba(255, 255, 255, 0.2)', 'rgba(255, 255, 255, 0.4)']
+  });
+
+  const getStrengthColor = () => {
+    if (passwordStrength < 50) return '#FF3B30';
+    if (passwordStrength < 75) return '#FFCC00';
+    return '#34C759';
+  };
+
+  const getStrengthText = () => {
+    if (passwordStrength < 50) return 'Weak';
+    if (passwordStrength < 75) return 'Medium';
+    return 'Strong';
+  };
+
+  return (
+    <View style={styles.inputContainer}>
+      <Text style={styles.label}>{label}</Text>
+      <Animated.View style={[styles.inputWrapper, { borderColor }]}>
+        <BlurView
+          intensity={isFocused ? 120 : 80}
+          tint="light"
+          style={styles.inputBlur}
+        >
+          <View style={styles.inputContent}>
+            <Ionicons 
+              name={icon} 
+              size={20} 
+              color={isFocused ? "#1f2937" : "rgba(31, 41, 55, 0.7)"} 
+              style={styles.inputIcon} 
+            />
+            {React.cloneElement(children, { onFocus, onBlur })}
+          </View>
+          <View style={styles.liquidOverlay} />
+        </BlurView>
+      </Animated.View>
+      {showStrengthBar && (
+        <View style={styles.strengthContainer}>
+          <View style={styles.strengthBar}>
+            <View 
+              style={[
+                styles.strengthIndicator, 
+                { 
+                  width: `${passwordStrength}%`,
+                  backgroundColor: getStrengthColor()
+                }
+              ]} 
+            />
+          </View>
+          <Text style={styles.strengthText}>
+            Password strength: {getStrengthText()}
+          </Text>
+        </View>
+      )}
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    </View>
+  );
+};
 
 export default function ResetPasswordScreen() {
   const [password, setPassword] = useState('');
@@ -32,6 +124,18 @@ export default function ResetPasswordScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { token } = params;
+  const topInset = useSafeAreaInsets().top;
+  
+  // Subtle entrance animation
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
   useEffect(() => {
     if (!token) {
@@ -113,140 +217,216 @@ export default function ResetPasswordScreen() {
     }
   };
 
-  const getStrengthColor = () => {
-    if (passwordStrength < 50) return '#FF3B30';
-    if (passwordStrength < 75) return '#FFCC00';
-    return '#34C759';
-  };
-
-  const getStrengthText = () => {
-    if (passwordStrength < 50) return 'Weak';
-    if (passwordStrength < 75) return 'Medium';
-    return 'Strong';
-  };
-
   if (!token) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.errorText}>Invalid reset token.</Text>
-      </View>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <StatusBar style="dark" />
+        <LinearGradient
+          colors={['#e0f2fe', '#bae6fd', '#7dd3fc']}
+          style={styles.container}
+        >
+          <ScrollView
+            contentContainerStyle={[
+              styles.scrollContent,
+              { paddingTop: topInset + 40 }
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
+          >
+            <View style={styles.errorContainer}>
+              <BlurView intensity={100} tint="light" style={styles.liquidCard}>
+                <LinearGradient
+                  colors={[
+                    'rgba(255, 255, 255, 0.4)',
+                    'rgba(255, 255, 255, 0.1)',
+                    'rgba(255, 255, 255, 0.3)'
+                  ]}
+                  style={styles.cardGradient}
+                >
+                  <Ionicons name="alert-circle" size={48} color="#FF3B30" />
+                  <Text style={styles.errorTitle}>Invalid Token</Text>
+                  <Text style={styles.errorDescription}>
+                    The password reset link is invalid or has expired.
+                  </Text>
+                </LinearGradient>
+              </BlurView>
+            </View>
+          </ScrollView>
+        </LinearGradient>
+      </KeyboardAvoidingView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      style={{ flex: 1 }}
+    >
       <StatusBar style="dark" />
       
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.keyboardAvoidView}
+      {/* Liquid Glass Background with Blue Theme */}
+      <LinearGradient
+        colors={['#e0f2fe', '#bae6fd', '#7dd3fc']}
+        style={styles.container}
       >
-        <ScrollView 
-          contentContainerStyle={styles.scrollContent}
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingTop: topInset + 40 }
+          ]}
           keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
+          {/* Header with Back Button */}
+          <Animated.View style={[styles.header, { opacity: fadeAnim }]}>
             <TouchableOpacity 
               style={styles.backButton}
               onPress={() => router.push('/login')}
             >
-              <Text style={styles.backButtonText}>← Back to Login</Text>
+              <BlurView intensity={80} tint="light" style={styles.backButtonBlur}>
+                <Ionicons name="arrow-back" size={20} color="#1C1C1E" />
+                <Text style={styles.backButtonText}>Back to Login</Text>
+              </BlurView>
             </TouchableOpacity>
-          </View>
+          </Animated.View>
           
+          {/* Error Alert */}
           {error ? (
-            <View style={styles.errorContainer}>
-              <Text style={styles.errorMessage}>{error}</Text>
-            </View>
+            <Animated.View style={[styles.alertContainer, { opacity: fadeAnim }]}>
+              <BlurView intensity={100} tint="light" style={styles.alertCard}>
+                <LinearGradient
+                  colors={[
+                    'rgba(255, 59, 48, 0.1)',
+                    'rgba(255, 59, 48, 0.05)'
+                  ]}
+                  style={styles.alertGradient}
+                >
+                  <Ionicons name="alert-circle" size={24} color="#FF3B30" />
+                  <Text style={styles.alertText}>{error}</Text>
+                </LinearGradient>
+              </BlurView>
+            </Animated.View>
           ) : null}
           
-          <View style={styles.content}>
-            {success ? (
-              <View style={styles.successContainer}>
-                <Text style={styles.title}>Password Reset Successful</Text>
-                <Text style={styles.description}>
-                  Your password has been reset successfully. You will be redirected to the login page shortly.
-                </Text>
-                <ActivityIndicator color="#4A90E2" style={styles.loader} />
-              </View>
-            ) : (
-              <>
-                <Text style={styles.title}>Reset Password</Text>
-                <Text style={styles.description}>
-                  Create a new password for your account.
-                </Text>
-                
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>New Password</Text>
-                  <TextInput
-                    style={[styles.input, passwordError ? styles.inputError : null]}
-                    placeholder="Enter new password"
-                    value={password}
-                    onChangeText={handlePasswordChange}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    onBlur={validatePassword}
-                  />
-                  <View style={styles.strengthContainer}>
-                    <View style={styles.strengthBar}>
-                      <View 
-                        style={[
-                          styles.strengthIndicator, 
-                          { 
-                            width: `${passwordStrength}%`,
-                            backgroundColor: getStrengthColor()
-                          }
-                        ]} 
-                      />
-                    </View>
-                    <Text style={styles.strengthText}>
-                      Password strength: {getStrengthText()}
+          {/* Main Content Card */}
+          <Animated.View style={[styles.cardWrapper, { opacity: fadeAnim }]}>
+            <BlurView intensity={100} tint="light" style={styles.liquidCard}>
+              <LinearGradient
+                colors={[
+                  'rgba(255, 255, 255, 0.4)',
+                  'rgba(255, 255, 255, 0.1)',
+                  'rgba(255, 255, 255, 0.3)'
+                ]}
+                style={styles.cardGradient}
+              >
+                {success ? (
+                  <View style={styles.successContainer}>
+                    <Ionicons name="checkmark-circle" size={64} color="#34C759" />
+                    <Text style={styles.title}>Password Reset Successful</Text>
+                    <Text style={styles.description}>
+                      Your password has been reset successfully. You will be redirected to the login page shortly.
                     </Text>
+                    <ActivityIndicator size="large" color="#7dd3fc" style={styles.loader} />
                   </View>
-                  {passwordError ? <Text style={styles.errorText}>{passwordError}</Text> : null}
-                </View>
-                
-                <View style={styles.inputContainer}>
-                  <Text style={styles.label}>Confirm Password</Text>
-                  <TextInput
-                    style={[styles.input, confirmPasswordError ? styles.inputError : null]}
-                    placeholder="Confirm your password"
-                    value={confirmPassword}
-                    onChangeText={setConfirmPassword}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    onBlur={validateConfirmPassword}
-                  />
-                  {confirmPasswordError ? <Text style={styles.errorText}>{confirmPasswordError}</Text> : null}
-                </View>
+                ) : (
+                  <>
+                    <Text style={styles.title}>Reset Password</Text>
+                    <Text style={styles.description}>
+                      Create a new password for your account.
+                    </Text>
+                    
+                    <LiquidGlassInput 
+                      label="New Password" 
+                      icon="lock-closed-outline" 
+                      error={passwordError} 
+                      value={password}
+                      showStrengthBar={true}
+                      passwordStrength={passwordStrength}
+                    >
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Enter new password"
+                        placeholderTextColor="rgba(31, 41, 55, 0.5)"
+                        value={password}
+                        onChangeText={handlePasswordChange}
+                        secureTextEntry
+                        autoCapitalize="none"
+                        selectionColor="#1f2937"
+                      />
+                    </LiquidGlassInput>
+                    
+                    <LiquidGlassInput 
+                      label="Confirm Password" 
+                      icon="lock-closed-outline" 
+                      error={confirmPasswordError} 
+                      value={confirmPassword}
+                    >
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Confirm your password"
+                        placeholderTextColor="rgba(31, 41, 55, 0.5)"
+                        value={confirmPassword}
+                        onChangeText={setConfirmPassword}
+                        secureTextEntry
+                        autoCapitalize="none"
+                        selectionColor="#1f2937"
+                      />
+                    </LiquidGlassInput>
 
-                <TouchableOpacity 
-                  style={[
-                    styles.button, 
-                    (!password || !confirmPassword) ? styles.buttonDisabled : null
-                  ]} 
-                  onPress={handleResetPassword}
-                  disabled={loading || !password || !confirmPassword}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="#FFFFFF" />
-                  ) : (
-                    <Text style={styles.buttonText}>Reset Password</Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+                    {/* Liquid Glass Button */}
+                    <TouchableOpacity
+                      style={styles.buttonWrapper}
+                      onPress={handleResetPassword}
+                      disabled={loading || !password || !confirmPassword}
+                      activeOpacity={0.8}
+                    >
+                      <BlurView 
+                        intensity={80} 
+                        tint={(!password || !confirmPassword) ? "light" : "dark"} 
+                        style={styles.buttonBlur}
+                      >
+                        <LinearGradient
+                          colors={(!password || !confirmPassword) ? 
+                            ['rgba(125, 211, 252, 0.3)', 'rgba(125, 211, 252, 0.2)'] :
+                            ['rgba(15, 23, 42, 0.9)', 'rgba(30, 41, 59, 0.9)']
+                          }
+                          style={styles.buttonGradient}
+                        >
+                          {loading ? (
+                            <ActivityIndicator color="#FFFFFF" size="small" />
+                          ) : (
+                            <Text style={[styles.buttonText, (!password || !confirmPassword) && styles.buttonTextDisabled]}>
+                              Reset Password
+                            </Text>
+                          )}
+                        </LinearGradient>
+                      </BlurView>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </LinearGradient>
+            </BlurView>
+          </Animated.View>
         </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+      </LinearGradient>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'transparent',
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   keyboardAvoidView: {
     flex: 1,
@@ -270,16 +450,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '600',
-    marginBottom: 15,
-    color: '#1C1C1E',
+    fontSize: 28,
+    fontWeight: '700',
+    marginBottom: 16,
+    color: '#0f172a',
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Display' : 'System',
   },
   description: {
     fontSize: 16,
-    color: '#8E8E93',
-    marginBottom: 30,
-    lineHeight: 22,
+    color: 'rgba(15, 23, 42, 0.7)',
+    marginBottom: 32,
+    lineHeight: 24,
+    textAlign: 'center',
+    fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '500',
   },
   inputContainer: {
     marginBottom: 25,
@@ -335,14 +520,19 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   button: {
-    backgroundColor: '#4A90E2',
-    height: 50,
-    borderRadius: 10,
+    backgroundColor: '#7dd3fc',
+    height: 56,
+    borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   buttonDisabled: {
-    backgroundColor: '#A1C6F7',
+    backgroundColor: 'rgba(125, 211, 252, 0.5)',
   },
   buttonText: {
     color: '#FFFFFF',

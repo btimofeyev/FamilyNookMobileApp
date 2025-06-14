@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Tabs } from 'expo-router';
 import { View, StyleSheet, Platform, Animated, TouchableOpacity, Dimensions } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import CustomTabIcon from '../components/CustomTabIcon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -32,7 +33,14 @@ function CustomTabBar({ state, descriptors, navigation }) {
   const pillWidth = tabLayouts[state.index]?.width * 0.8 ?? 0;
 
   return (
-    <BlurView tint="dark" intensity={90} style={[styles.tabBarContainer, { height: 65 + insets.bottom }]}>
+    <BlurView tint="systemUltraThinMaterialLight" intensity={95} style={[styles.tabBarContainer, { height: 85 + insets.bottom }]}>
+      <LinearGradient
+        colors={[
+          'rgba(255, 255, 255, 0.95)', 
+          'rgba(255, 255, 255, 0.8)'
+        ]}
+        style={styles.tabBarHighlight}
+      />
       {/* The single animated pill that slides */}
       <Animated.View
         style={[
@@ -44,7 +52,15 @@ function CustomTabBar({ state, descriptors, navigation }) {
             left: tabLayouts[state.index] ? (tabLayouts[state.index].width * 0.1) : 0,
           },
         ]}
-      />
+      >
+        <LinearGradient
+          colors={[
+            'rgba(125, 211, 252, 0.8)', 
+            'rgba(125, 211, 252, 0.6)'
+          ]}
+          style={styles.pillGradient}
+        />
+      </Animated.View>
 
       {state.routes.map((route, index) => {
         const { options } = descriptors[route.key];
@@ -130,19 +146,45 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     flexDirection: 'row',
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255, 255, 255, 0.3)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 16,
+  },
+  tabBarHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   tabItem: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingTop: 12,
   },
   slidingPill: {
     position: 'absolute',
-    top: 12.5, // Positioned to be vertically centered
-    height: 40,
-    backgroundColor: 'rgba(0, 122, 255, 0.25)',
-    borderRadius: 20,
+    top: 18,
+    height: 48,
+    borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(0, 122, 255, 0.4)',
+    borderColor: 'rgba(125, 211, 252, 0.4)',
+    overflow: 'hidden',
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  pillGradient: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
   },
 });

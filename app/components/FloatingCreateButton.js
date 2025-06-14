@@ -91,7 +91,7 @@ const FloatingCreateButton = () => {
             
             {/* Inner glow effect */}
             <LinearGradient
-              colors={['rgba(0, 122, 255, 0.8)', 'rgba(0, 122, 255, 0.6)']}
+              colors={['rgba(125, 211, 252, 0.9)', 'rgba(96, 165, 250, 0.8)']}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.iconBackground}
@@ -117,7 +117,7 @@ const styles = StyleSheet.create({
     right: 24,
     width: 56,
     height: 56,
-    shadowColor: '#007AFF',
+    shadowColor: 'rgba(125, 211, 252, 0.5)',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.25,
     shadowRadius: 16,
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     right: -6,
     bottom: -6,
     borderRadius: 34,
-    backgroundColor: 'rgba(0, 122, 255, 0.15)',
+    backgroundColor: 'rgba(125, 211, 252, 0.15)',
   },
   button: {
     width: 56,

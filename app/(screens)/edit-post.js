@@ -18,6 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import apiClient from '../api/client';
 import { useAuth } from '../../context/AuthContext';
 import { useFamily } from '../../context/FamilyContext';
@@ -27,6 +29,7 @@ const EditPostScreen = () => {
   const { postId } = useLocalSearchParams();
   const { user } = useAuth();
   const { selectedFamily } = useFamily();
+  const topInset = useSafeAreaInsets().top;
   
   const [post, setPost] = useState(null);
   const [caption, setCaption] = useState('');
@@ -265,19 +268,34 @@ const EditPostScreen = () => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <LinearGradient
+          colors={['#f0f9ff', '#e0f2fe', '#f8faff']}
+          style={styles.backgroundGradient}
+        />
         <Stack.Screen
           options={{
             title: 'Edit Post',
             headerStyle: {
-              backgroundColor: '#121212'
+              backgroundColor: 'transparent'
             },
-            headerTintColor: '#F5F5F7',
-            headerShown: true
+            headerTintColor: '#1C1C1E',
+            headerShown: true,
+            headerTransparent: true
           }}
         />
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3BAFBC" />
-          <Text style={styles.loadingText}>Loading post...</Text>
+        <View style={[styles.loadingContainer, { paddingTop: topInset + 60 }]}>
+          <BlurView intensity={90} tint="systemUltraThinMaterialLight" style={styles.loadingCard}>
+            <LinearGradient
+              colors={[
+                'rgba(255, 255, 255, 0.9)', 
+                'rgba(255, 255, 255, 0.6)'
+              ]}
+              style={styles.loadingHighlight}
+            />
+            <ActivityIndicator size="large" color="#7dd3fc" />
+            <Text style={styles.loadingText}>Loading post...</Text>
+          </BlurView>
         </View>
       </SafeAreaView>
     );
@@ -287,22 +305,42 @@ const EditPostScreen = () => {
   if (error) {
     return (
       <SafeAreaView style={styles.container}>
+        <StatusBar style="dark" />
+        <LinearGradient
+          colors={['#f0f9ff', '#e0f2fe', '#f8faff']}
+          style={styles.backgroundGradient}
+        />
         <Stack.Screen
           options={{
             title: 'Edit Post',
             headerStyle: {
-              backgroundColor: '#121212'
+              backgroundColor: 'transparent'
             },
-            headerTintColor: '#F5F5F7',
-            headerShown: true
+            headerTintColor: '#1C1C1E',
+            headerShown: true,
+            headerTransparent: true
           }}
         />
-        <View style={styles.errorContainer}>
-          <Ionicons name="alert-circle-outline" size={48} color="#FF453A" />
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity style={styles.button} onPress={() => router.back()}>
-            <Text style={styles.buttonText}>Go Back</Text>
-          </TouchableOpacity>
+        <View style={[styles.errorContainer, { paddingTop: topInset + 60 }]}>
+          <BlurView intensity={90} tint="systemUltraThinMaterialLight" style={styles.errorCard}>
+            <LinearGradient
+              colors={[
+                'rgba(255, 255, 255, 0.9)', 
+                'rgba(255, 255, 255, 0.6)'
+              ]}
+              style={styles.errorHighlight}
+            />
+            <Ionicons name="alert-circle-outline" size={48} color="#FF3B30" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.button} onPress={() => router.back()}>
+              <LinearGradient
+                colors={['#7dd3fc', '#60a5fa']}
+                style={styles.buttonGradient}
+              >
+                <Text style={styles.buttonText}>Go Back</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+          </BlurView>
         </View>
       </SafeAreaView>
     );
@@ -310,19 +348,35 @@ const EditPostScreen = () => {
   
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar style="dark" />
+      <LinearGradient
+        colors={['#f0f9ff', '#e0f2fe', '#f8faff']}
+        style={styles.backgroundGradient}
+      />
       <Stack.Screen
         options={{
           title: 'Edit Post',
           headerStyle: {
-            backgroundColor: '#121212'
+            backgroundColor: 'transparent'
           },
-          headerTintColor: '#F5F5F7',
-          headerShown: true
+          headerTintColor: '#1C1C1E',
+          headerShown: true,
+          headerTransparent: true
         }}
       />
       
-      <ScrollView style={styles.scrollContainer}>
-        <BlurView intensity={20} tint="dark" style={styles.formContainer}>
+      <ScrollView style={[
+        styles.scrollContainer,
+        { paddingTop: topInset + 60 }
+      ]}>
+        <BlurView intensity={90} tint="systemUltraThinMaterialLight" style={styles.formContainer}>
+          <LinearGradient
+            colors={[
+              'rgba(255, 255, 255, 0.8)', 
+              'rgba(255, 255, 255, 0.4)'
+            ]}
+            style={styles.formHighlight}
+          />
           {/* Text Input Section */}
           <Text style={styles.label}>Post Content</Text>
           <TextInput
@@ -346,13 +400,13 @@ const EditPostScreen = () => {
                     {item.needsValidation ? (
                       // Show loading state while validating
                       <View style={styles.validatingMedia}>
-                        <ActivityIndicator size="small" color="#3BAFBC" />
+                        <ActivityIndicator size="small" color="#7dd3fc" />
                         <Text style={styles.validatingText}>Checking...</Text>
                       </View>
                     ) : item.isValid === false ? (
                       // Show placeholder for invalid/missing media
                       <View style={styles.invalidMedia}>
-                        <Ionicons name="alert-circle" size={32} color="#FF453A" />
+                        <Ionicons name="alert-circle" size={32} color="#FF3B30" />
                         <Text style={styles.invalidMediaText}>Media unavailable</Text>
                       </View>
                     ) : item.type === 'video' ? (
@@ -391,7 +445,7 @@ const EditPostScreen = () => {
                       style={styles.removeMediaButton}
                       onPress={() => confirmMediaRemoval(item)}
                     >
-                      <Ionicons name="close-circle" size={24} color="#FF453A" />
+                      <Ionicons name="close-circle" size={24} color="#FF3B30" />
                     </TouchableOpacity>
                   </View>
                 ))}
@@ -404,7 +458,7 @@ const EditPostScreen = () => {
             style={styles.addMediaButton}
             onPress={() => setMediaPickerVisible(true)}
           >
-            <Ionicons name="images-outline" size={24} color="#3BAFBC" />
+            <Ionicons name="images-outline" size={24} color="#7dd3fc" />
             <Text style={styles.addMediaButtonText}>Add Photos/Videos</Text>
           </TouchableOpacity>
           
@@ -424,7 +478,7 @@ const EditPostScreen = () => {
               disabled={saving}
             >
               <LinearGradient
-                colors={['#3BAFBC', '#1E2B2F']}
+                colors={['#7dd3fc', '#60a5fa']}
                 start={{ x: 0, y: 0 }}
                 end={{ x: 1, y: 0 }}
                 style={styles.saveButtonGradient}
@@ -455,7 +509,14 @@ const EditPostScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: 'transparent',
+  },
+  backgroundGradient: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   scrollContainer: {
     flex: 1,
@@ -464,11 +525,30 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: 20,
+  },
+  loadingCard: {
+    padding: 32,
+    borderRadius: 24,
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    minWidth: 200,
+  },
+  loadingHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   loadingText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 16,
-    color: '#8E8E93',
+    color: '#1C1C1E',
+    fontWeight: '500',
+    textAlign: 'center',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   validatingMedia: {
@@ -479,26 +559,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   validatingText: {
-    color: '#8E8E93',
+    color: 'rgba(28, 28, 30, 0.6)',
     fontSize: 12,
     marginTop: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '500',
   },
   invalidMedia: {
     width: '100%',
     height: '100%',
-    backgroundColor: 'rgba(44, 44, 46, 0.6)',
+    backgroundColor: 'rgba(255, 59, 48, 0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 69, 58, 0.3)',
-    borderRadius: 8,
+    borderColor: 'rgba(255, 59, 48, 0.3)',
+    borderRadius: 12,
   },
   invalidMediaText: {
-    color: '#FF453A',
+    color: '#FF3B30',
     fontSize: 10,
     marginTop: 4,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '500',
   },
   errorContainer: {
     flex: 1,
@@ -506,52 +588,95 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
   },
+  errorCard: {
+    padding: 32,
+    borderRadius: 24,
+    alignItems: 'center',
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    maxWidth: 320,
+  },
+  errorHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   errorText: {
-    marginTop: 12,
+    marginTop: 16,
     fontSize: 16,
-    color: '#F5F5F7',
+    color: '#1C1C1E',
     textAlign: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '500',
+    lineHeight: 22,
   },
   formContainer: {
     margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    backgroundColor: 'rgba(30, 30, 30, 0.7)', // Fallback color
+    padding: 20,
+    borderRadius: 24,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  formHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   label: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '600',
-    color: '#F5F5F7',
-    marginBottom: 8,
+    color: '#1C1C1E',
+    marginBottom: 12,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    letterSpacing: -0.2,
   },
   textInput: {
-    backgroundColor: 'rgba(44, 44, 46, 0.6)',
-    borderRadius: 12,
-    padding: 12,
-    color: '#F5F5F7',
+    backgroundColor: 'rgba(240, 247, 255, 0.8)',
+    borderRadius: 16,
+    padding: 16,
+    color: '#1C1C1E',
     fontSize: 16,
-    minHeight: 100,
-    marginBottom: 20,
+    minHeight: 120,
+    marginBottom: 24,
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
+    fontWeight: '500',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.6)',
+    textAlignVertical: 'top',
   },
   mediaPreviewSection: {
-    marginBottom: 20,
+    marginBottom: 24,
   },
   mediaPreviewContainer: {
     width: 100,
     height: 100,
-    marginRight: 8,
-    borderRadius: 8,
+    marginRight: 12,
+    borderRadius: 16,
     overflow: 'hidden',
     position: 'relative',
+    shadowColor: 'rgba(0, 0, 0, 0.1)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   mediaPreview: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
+    borderRadius: 16,
   },
   videoPreview: {
     width: '100%',
@@ -579,13 +704,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    padding: 12,
-    backgroundColor: 'rgba(44, 44, 46, 0.6)',
-    borderRadius: 12,
-    marginBottom: 20,
+    padding: 16,
+    backgroundColor: 'rgba(125, 211, 252, 0.1)',
+    borderRadius: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(125, 211, 252, 0.3)',
   },
   addMediaButtonText: {
-    color: '#3BAFBC',
+    color: '#7dd3fc',
     fontSize: 16,
     fontWeight: '600',
     marginLeft: 8,
@@ -597,26 +724,33 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    padding: 14,
-    borderRadius: 12,
-    backgroundColor: 'rgba(44, 44, 46, 0.6)',
-    marginRight: 8,
+    padding: 16,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255, 255, 255, 0.6)',
+    marginRight: 12,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.8)',
   },
   cancelButtonText: {
-    color: '#F5F5F7',
+    color: '#1C1C1E',
     fontSize: 16,
     fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   saveButton: {
     flex: 1,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    marginLeft: 8,
+    marginLeft: 12,
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   saveButtonGradient: {
-    padding: 14,
+    padding: 16,
     alignItems: 'center',
   },
   saveButtonText: {
@@ -626,10 +760,18 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'SF Pro Text' : 'System',
   },
   button: {
-    backgroundColor: '#3BAFBC',
-    paddingVertical: 12,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: 'rgba(125, 211, 252, 0.3)',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 1,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  buttonGradient: {
+    paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 8,
+    alignItems: 'center',
   },
   buttonText: {
     color: '#FFFFFF',

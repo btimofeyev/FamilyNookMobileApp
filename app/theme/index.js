@@ -1,41 +1,46 @@
 import { Platform } from 'react-native';
 
 export const Colors = {
-  primary: '#007AFF',
+  primary: '#7dd3fc',        // Soft blue - our main brand color
+  primaryDark: '#60a5fa',    // Darker variant for depth
   secondary: '#5856D6',
   success: '#34C759',
   warning: '#FF9500',
   error: '#FF3B30',
   
   background: {
-    primary: '#F0F7FF',
-    secondary: '#E6F3FF',
-    tertiary: '#DCECFF',
+    primary: '#f0f9ff',       // Very light blue
+    secondary: '#e0f2fe',     // Light sky blue
+    tertiary: '#bae6fd',      // Medium blue
+    quaternary: '#f8faff',    // Alternative very light blue
     dark: '#1E2B2F',
+    modal: 'rgba(255, 255, 255, 0.95)',
   },
   
   text: {
     primary: '#1C1C1E',
     secondary: 'rgba(28, 28, 30, 0.7)',
     tertiary: 'rgba(28, 28, 30, 0.5)',
-    dark: '#000000',
+    placeholder: 'rgba(31, 41, 55, 0.5)',
+    dark: '#0f172a',          // Slightly softer dark
     light: '#FFFFFF',
   },
   
   glass: {
     // Core glass colors for borders and overlays
     border: 'rgba(255, 255, 255, 0.3)',
-    borderFocused: 'rgba(255, 255, 255, 0.5)',
-    borderActive: 'rgba(0, 122, 255, 0.4)',
+    borderFocused: 'rgba(255, 255, 255, 0.4)',
+    borderActive: 'rgba(125, 211, 252, 0.4)',
     
     // Highlight gradients for liquid glass effect
     highlight: [
-      'rgba(255, 255, 255, 0.5)',
-      'rgba(255, 255, 255, 0.1)'
+      'rgba(255, 255, 255, 0.4)',
+      'rgba(255, 255, 255, 0.1)',
+      'rgba(255, 255, 255, 0.3)'
     ],
     highlightStrong: [
-      'rgba(255, 255, 255, 0.7)',
-      'rgba(255, 255, 255, 0.2)'
+      'rgba(255, 255, 255, 0.8)',
+      'rgba(255, 255, 255, 0.4)'
     ],
     highlightSubtle: [
       'rgba(255, 255, 255, 0.3)',
@@ -43,14 +48,15 @@ export const Colors = {
     ],
     
     // Background overlays
-    overlay: 'rgba(255, 255, 255, 0.2)',
+    overlay: 'rgba(255, 255, 255, 0.1)',
     overlayStrong: 'rgba(255, 255, 255, 0.4)',
-    overlaySubtle: 'rgba(255, 255, 255, 0.1)',
+    overlaySubtle: 'rgba(255, 255, 255, 0.05)',
     
     // Shadow colors for depth
-    shadow: 'rgba(0, 0, 0, 0.1)',
-    shadowStrong: 'rgba(0, 0, 0, 0.2)',
-    shadowColored: 'rgba(0, 122, 255, 0.15)',
+    shadow: 'rgba(0, 0, 0, 0.08)',
+    shadowStrong: 'rgba(0, 0, 0, 0.1)',
+    shadowColored: 'rgba(125, 211, 252, 0.3)',
+    shadowButton: 'rgba(15, 23, 42, 0.3)',
   },
   
   // Semantic colors
@@ -59,10 +65,20 @@ export const Colors = {
   share: '#1C1C1E',
   notification: '#FF3B30',
   
-  // Legacy gradients for backward compatibility
-  accentGradient: ['#007AFF', '#5856D6'],
-  primaryGradient: ['#007AFF', '#0056CC'],
+  // Liquid glass gradients
+  accentGradient: ['#7dd3fc', '#60a5fa'],
+  primaryGradient: ['#7dd3fc', '#60a5fa'],
   secondaryGradient: ['#5856D6', '#AF52DE'],
+  backgroundGradient: ['#e0f2fe', '#bae6fd', '#7dd3fc'],
+  cardGradient: [
+    'rgba(255, 255, 255, 0.4)',
+    'rgba(255, 255, 255, 0.1)', 
+    'rgba(255, 255, 255, 0.3)'
+  ],
+  buttonGradient: [
+    'rgba(15, 23, 42, 0.9)', 
+    'rgba(30, 41, 59, 0.9)'
+  ],
 };
 
 export const Typography = {
@@ -180,10 +196,17 @@ export const Shadows = {
     elevation: 16,
   },
   glassColored: {
-    shadowColor: '#007AFF',
+    shadowColor: '#7dd3fc',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
-    shadowRadius: 24,
+    shadowOpacity: 0.3,
+    shadowRadius: 16,
+    elevation: 12,
+  },
+  glassButton: {
+    shadowColor: 'rgba(15, 23, 42, 0.3)',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
     elevation: 12,
   }
 };
@@ -197,10 +220,17 @@ export const BlurIntensity = {
   max: 100,
   
   // Liquid Glass specific intensities
-  glassSubtle: 40,
-  glass: 80,
-  glassStrong: 95,
-  glassHeavy: 100,
+  glassSubtle: 80,
+  glass: 90,
+  glassStrong: 100,
+  glassHeavy: 120,
+  
+  // Input and component specific
+  input: 80,
+  inputFocused: 120,
+  card: 90,
+  modal: 100,
+  backdrop: 25,
 };
 
 export const Animations = {
@@ -319,8 +349,8 @@ export const createButtonStyle = (variant = 'primary') => {
 export const LiquidGlassMaterials = {
   // Light materials for primary content
   light: {
-    intensity: BlurIntensity.glass,
-    tint: 'light',
+    intensity: BlurIntensity.card,
+    tint: 'systemUltraThinMaterialLight',
     highlight: Colors.glass.highlight,
     border: Colors.glass.border,
     shadow: Shadows.glass,
@@ -329,7 +359,7 @@ export const LiquidGlassMaterials = {
   // Strong materials for floating elements
   lightStrong: {
     intensity: BlurIntensity.glassStrong,
-    tint: 'light',
+    tint: 'systemUltraThinMaterialLight',
     highlight: Colors.glass.highlightStrong,
     border: Colors.glass.borderFocused,
     shadow: Shadows.glassStrong,
@@ -346,11 +376,29 @@ export const LiquidGlassMaterials = {
   
   // Active/focused materials
   active: {
-    intensity: BlurIntensity.glassStrong,
+    intensity: BlurIntensity.inputFocused,
     tint: 'light',
     highlight: Colors.glass.highlightStrong,
     border: Colors.glass.borderActive,
     shadow: Shadows.glassColored,
+  },
+  
+  // Input materials
+  input: {
+    intensity: BlurIntensity.input,
+    tint: 'light',
+    highlight: Colors.glass.highlight,
+    border: Colors.glass.border,
+    shadow: Shadows.glass,
+  },
+  
+  // Button materials
+  button: {
+    intensity: BlurIntensity.input,
+    tint: 'dark',
+    highlight: Colors.buttonGradient,
+    border: Colors.glass.borderActive,
+    shadow: Shadows.glassButton,
   }
 };
 
